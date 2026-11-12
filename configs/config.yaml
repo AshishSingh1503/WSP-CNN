@@ -13,6 +13,8 @@ paths:                       # relative paths resolve against the repo root
   registry: results/checkpoints_registry.json
   model_card: results/model_card.json
   e0_results_dir: results/E0
+  finetune_dir: checkpoints/fine_tuning
+  e1_results_dir: results/E1
 
 data:                        # PROTOCOL.md Section 3
   num_classes: 10
@@ -58,13 +60,19 @@ e0:                          # common checkpoint: head-only warm-up on cached fe
   agreement_images: 512      # full-model vs cached-feature path check
   min_agreement: 0.995
 
-e1:                          # full fine-tuning reference
-  epochs: 10
-  lr: 0.001
-  momentum: 0.9
-  weight_decay: 0.0005
+e1:                          # full fine-tuning reference (Stage 3)
+  epochs: 15
+  backbone_lr: 0.00003       # PRE-SWEEP DEFAULT: replaced by the seed-0 val_select sweep winner
+  classifier_lr: 0.001       # PRE-SWEEP DEFAULT: replaced by the seed-0 val_select sweep winner
+  weight_decay: 0.01
+  warmup_epochs: 1           # linear warm-up, then cosine to 0 (stepped per batch)
   schedule: cosine
   select_on: val_select
+  accum_steps: 1             # raised automatically (and logged) if CUDA runs out of memory
+  sweep_seed: 0
+  sweep_epochs: 8
+  sweep_backbone_lrs: [0.00001, 0.00003, 0.0001]
+  sweep_classifier_lrs: [0.0001, 0.001]
 
 budgets:                     # PROTOCOL.md Section 8
   max_iterations: 10

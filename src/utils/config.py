@@ -31,6 +31,8 @@ class PathsConfig(_Frozen):
     registry: str
     model_card: str
     e0_results_dir: str
+    finetune_dir: str
+    e1_results_dir: str
 
 
 class DataConfig(_Frozen):
@@ -93,11 +95,17 @@ class E0Config(_Frozen):
 
 class E1Config(_Frozen):
     epochs: int
-    lr: float
-    momentum: float
+    backbone_lr: float
+    classifier_lr: float
     weight_decay: float
+    warmup_epochs: int
     schedule: str
     select_on: str
+    accum_steps: int
+    sweep_seed: int
+    sweep_epochs: int
+    sweep_backbone_lrs: tuple[float, ...]
+    sweep_classifier_lrs: tuple[float, ...]
 
 
 class BudgetConfig(_Frozen):

@@ -1,0 +1,17 @@
+{
+  "0": {
+    "file_sha256": "62cd10ca14cab52f210dd0f466dcedb1d0239ee1311dcd1b6a11696a41cbfe83",
+    "path": "checkpoints\\baseline\\seed0\\common_start.pt",
+    "state_dict_sha256": "984f652b8e447512437afcd9e38cb43926758d5d5abfc6c3fa2e3e8cdf4dbff9"
+  },
+  "1": {
+    "file_sha256": "c3c7d9aa5002e62a7a08c258143dcf4f5f60cc57b0aafd297859a0b74302376c",
+    "path": "checkpoints\\baseline\\seed1\\common_start.pt",
+    "state_dict_sha256": "91756dc4e54b266c0b6615e6bf91482c1a4e1351ed9daad9b05eb39352a14ee3"
+  },
+  "2": {
+    "file_sha256": "cb2a2298ae66f950c375f7ad3010d2e65b1b9a3a5116c7a6cad451cfe51568ec",
+    "path": "checkpoints\\baseline\\seed2\\common_start.pt",
+    "state_dict_sha256": "e5fc6c8eca222c4caa31906f516a2746fd3ce65ae2f3c4cbce14ca91c30c55e0"
+  }
+}

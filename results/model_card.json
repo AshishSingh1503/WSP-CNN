@@ -1,0 +1,167 @@
+{
+  "total_params": 57044810,
+  "parameters": [
+    {
+      "name": "features.0.weight",
+      "type": "Conv2d",
+      "shape": [
+        64,
+        3,
+        11,
+        11
+      ],
+      "numel": 23232,
+      "trainable": true
+    },
+    {
+      "name": "features.0.bias",
+      "type": "Conv2d",
+      "shape": [
+        64
+      ],
+      "numel": 64,
+      "trainable": true
+    },
+    {
+      "name": "features.3.weight",
+      "type": "Conv2d",
+      "shape": [
+        192,
+        64,
+        5,
+        5
+      ],
+      "numel": 307200,
+      "trainable": true
+    },
+    {
+      "name": "features.3.bias",
+      "type": "Conv2d",
+      "shape": [
+        192
+      ],
+      "numel": 192,
+      "trainable": true
+    },
+    {
+      "name": "features.6.weight",
+      "type": "Conv2d",
+      "shape": [
+        384,
+        192,
+        3,
+        3
+      ],
+      "numel": 663552,
+      "trainable": true
+    },
+    {
+      "name": "features.6.bias",
+      "type": "Conv2d",
+      "shape": [
+        384
+      ],
+      "numel": 384,
+      "trainable": true
+    },
+    {
+      "name": "features.8.weight",
+      "type": "Conv2d",
+      "shape": [
+        256,
+        384,
+        3,
+        3
+      ],
+      "numel": 884736,
+      "trainable": true
+    },
+    {
+      "name": "features.8.bias",
+      "type": "Conv2d",
+      "shape": [
+        256
+      ],
+      "numel": 256,
+      "trainable": true
+    },
+    {
+      "name": "features.10.weight",
+      "type": "Conv2d",
+      "shape": [
+        256,
+        256,
+        3,
+        3
+      ],
+      "numel": 589824,
+      "trainable": true
+    },
+    {
+      "name": "features.10.bias",
+      "type": "Conv2d",
+      "shape": [
+        256
+      ],
+      "numel": 256,
+      "trainable": true
+    },
+    {
+      "name": "classifier.1.weight",
+      "type": "Linear",
+      "shape": [
+        4096,
+        9216
+      ],
+      "numel": 37748736,
+      "trainable": true
+    },
+    {
+      "name": "classifier.1.bias",
+      "type": "Linear",
+      "shape": [
+        4096
+      ],
+      "numel": 4096,
+      "trainable": true
+    },
+    {
+      "name": "classifier.4.weight",
+      "type": "Linear",
+      "shape": [
+        4096,
+        4096
+      ],
+      "numel": 16777216,
+      "trainable": true
+    },
+    {
+      "name": "classifier.4.bias",
+      "type": "Linear",
+      "shape": [
+        4096
+      ],
+      "numel": 4096,
+      "trainable": true
+    },
+    {
+      "name": "classifier.6.weight",
+      "type": "Linear",
+      "shape": [
+        10,
+        4096
+      ],
+      "numel": 40960,
+      "trainable": true
+    },
+    {
+      "name": "classifier.6.bias",
+      "type": "Linear",
+      "shape": [
+        10
+      ],
+      "numel": 10,
+      "trainable": true
+    }
+  ]
+}

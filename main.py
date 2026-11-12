@@ -43,10 +43,20 @@ def run_baseline_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) ->
     run_baseline(cfg, args.seed, log, reproduce_check=args.reproduce_check)
 
 
+def run_finetune_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """E1: full fine-tuning for ``--seed`` (or the seed-0 learning-rate sweep with ``--sweep``)."""
+    from src.experiments.finetune import run_finetune, run_sweep
+    if args.sweep:
+        run_sweep(cfg, log)
+    else:
+        run_finetune(cfg, args.seed, log)
+
+
 EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]] = {
     "make_splits": run_make_splits,
     "check_data": run_check_data,
     "baseline": run_baseline_cmd,
+    "finetune": run_finetune_cmd,
 }
 
 
@@ -56,6 +66,7 @@ def main() -> None:
     parser.add_argument("--experiment", required=True, choices=sorted(EXPERIMENTS))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--sweep", action="store_true", help="finetune: run the seed-0 lr sweep")
     parser.add_argument("--reproduce-check", action="store_true",
                         help="baseline: retrain in memory and compare the hash with the registered one")
     args = parser.parse_args()
