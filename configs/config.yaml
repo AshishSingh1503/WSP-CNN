@@ -1,0 +1,141 @@
+# WSP-CNN master config. Every setting here is traceable to PROTOCOL.md.
+# Loaded into a frozen Pydantic model (src/utils/config.py); unknown keys are rejected.
+
+paths:                       # relative paths resolve against the repo root
+  data_dir: data
+  splits_dir: data/splits
+  checkpoints_dir: checkpoints
+  results_dir: results
+  prompts_dir: prompts
+  frozen_lock: results/FROZEN_PROTOCOL.lock   # created in Stage 8; its SHA-256 is the test-set token
+  features_dir: data/features                 # cached 4096-d penultimate features (E0 warm-up)
+  baseline_dir: checkpoints/baseline          # checkpoints/baseline/seed{S}/common_start.pt
+  registry: results/checkpoints_registry.json
+  model_card: results/model_card.json
+  e0_results_dir: results/E0
+
+data:                        # PROTOCOL.md Section 3
+  num_classes: 10
+  n_train: 45000
+  n_val_edit: 2500
+  n_val_select: 2500
+  n_official_train: 50000
+  n_test: 10000
+  split_seed: 2026
+  native_image_size: 32
+  image_size: 224
+  crop_padding: 4
+  imagenet_mean: [0.485, 0.456, 0.406]   # fallback if torchvision weights meta is unavailable
+  imagenet_std: [0.229, 0.224, 0.225]
+
+loader:
+  batch_size_train: 64
+  batch_size_eval: 128
+  num_workers: 2             # Windows: keep small; 0 is the safe fallback
+  pin_memory: true
+
+training:                    # PROTOCOL.md Sections 3-4
+  amp: true                  # training only; all evaluation is fp32
+  eval_amp: false
+  deterministic: true
+  warn_only_deterministic: true
+
+model:
+  arch: alexnet
+  pretrained_weights: IMAGENET1K_V1
+  expected_total_params: 57044810   # AlexNet with a 10-class classifier.6
+
+e0:                          # common checkpoint: head-only warm-up on cached features (Stage 2)
+  optimizer: adamw
+  epochs: 30
+  lr: 0.001
+  weight_decay: 0.0001
+  batch_size: 256
+  schedule: cosine
+  trainable_prefixes: ["classifier.6"]
+  select_on: val_select      # epoch with best val_select accuracy
+  feature_dtype: float16
+  agreement_images: 512      # full-model vs cached-feature path check
+  min_agreement: 0.995
+
+e1:                          # full fine-tuning reference
+  epochs: 10
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 0.0005
+  schedule: cosine
+  select_on: val_select
+
+budgets:                     # PROTOCOL.md Section 8
+  max_iterations: 10
+  candidates_per_iteration: 4
+  max_candidates: 40
+  max_accepted_per_iteration: 1
+  edit_budget_fraction: 0.001
+  ablation_fractions: [0.00001, 0.0001, 0.001, 0.01]
+  max_llm_retries: 1
+
+acceptance:                  # PROTOCOL.md Section 9
+  min_loss_decrease: 0.002
+  require_accuracy_non_decrease: true
+  stop_after_unproductive: 3
+  disable_early_stop_for: ["E4", "E5", "E7"]
+
+dsl:                         # PROTOCOL.md Section 6
+  max_ops_per_candidate: 3
+  add_delta:
+    max_entries: 64
+    max_abs_sigma_frac: 0.5
+  scale_output_channel:
+    max_channels: 8
+    factor_min: -2.0
+    factor_max: 3.0
+  bias_shift:
+    max_entries: 16
+    max_abs_classifier: 10.0
+    max_abs_other: 1.0
+  low_rank_update:
+    max_rows: 16
+    max_cols: 32
+    max_rank: 2
+    factor_abs_max: 1.0
+    max_abs_sigma_frac: 0.5
+
+controls:
+  e4_trials_per_seed: 5
+  e4_edits_per_trial: 10
+  e5_runs_per_seed: 5
+  e7_relative_steps: [0.005, 0.01, 0.02, 0.04]
+  e7_max_entries: 64
+
+llm:                         # PROTOCOL.md Section 10
+  provider: anthropic
+  model: claude-opus-5-5
+  temperature: 0.0
+  max_tokens: 16384
+
+positive_control:            # PROTOCOL.md Section 5
+  f1_tensor: features.10
+  f1_channels: 8
+  f1_seed_offset: 10000
+  f2_tensor: classifier.6.bias
+  f2_class_index: 3
+  f2_shift: -8.0
+  f3_tensor: features.3
+  f3_channels: 16
+  f3_seed_offset: 20000
+  min_val_select_drop_pp: 5.0
+  repair_success_fraction: 0.8
+  h4_null_rate: 0.2
+
+seeds:
+  primary: [0, 1, 2, 3, 4]
+  pilot: [100, 101, 102]
+
+stats:                       # PROTOCOL.md Section 12
+  n_bootstrap: 10000
+  bootstrap_seed: 2026
+  alpha: 0.05
+  n_primary_claims: 4
+  min_effect_pp: 0.3
+  min_positive_seeds: 4

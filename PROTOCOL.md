@@ -13,7 +13,7 @@ Source of the WSP idea: "Sparks of Weight-Space Programming" (Takehi, Teoh, Zhan
 
 ### Freeze mechanics
 
-At G0 and again before the first non-pilot run, a **freeze manifest** (`protocol_manifest.json`) is written. It contains the SHA-256 of: PROTOCOL.md, every file in `configs/`, every file in `prompts/`, the three split index files, and (once created) the hidden PC fault-spec files. The **frozen-protocol hash** is the SHA-256 of that manifest. The guarded test loader requires this hash plus an explicit final-eval flag (Section 13). The prompt hashes in Section 10 are filled into the manifest when the prompts exist; this is a freeze step, not a deviation, and must happen before any seed 0–4 run.
+At G0 and again before the first non-pilot run, a **freeze manifest** (`protocol_manifest.json`) is written. It contains the SHA-256 of: PROTOCOL.md, every file in `configs/`, every file in `prompts/`, the three split index files, and (once created) the hidden PC fault-spec files. At final evaluation (Stage 8) the manifest is written to `results/FROZEN_PROTOCOL.lock`; the SHA-256 of that file is the **final-eval token** that the guarded test loader requires (Section 13). The prompt hashes in Section 10 are filled into the manifest when the prompts exist; this is a freeze step, not a deviation, and must happen before any seed 0–4 run.
 
 ---
 
@@ -56,15 +56,15 @@ H1–H4 are tested as primary claims (Section 2). H5 and RQ6 are exploratory.
 | `val_select` | 2,500 (250 per class) | official CIFAR-10 train set | final checkpoint selection and stopping only; never shown to the LLM |
 | `test` | 10,000 (1,000 per class) | official CIFAR-10 test set | evaluated once per frozen checkpoint (Section 13) |
 
-- **Construction.** For each class c = 0…9 in order: take the sorted train indices of class c (5,000 each), permute with `np.random.default_rng(2026)` (one generator, consumed in class order), assign the first 250 to `val_edit`, the next 250 to `val_select`, and the remaining 4,500 to `train`. Split seed = **2026**. The split is identical for all arms and seeds.
-- **Index files** are saved under `data/splits/` (`train.npy`, `val_edit.npy`, `val_select.npy`), each hashed with SHA-256; hashes go in the freeze manifest. The disjointness and sizes are asserted by tests.
+- **Construction.** Two-stage sklearn `StratifiedShuffleSplit` on the official train labels, both stages with `random_state` = split seed **2026**: stage 1 holds out 5,000 images (500 per class) from the 50,000; stage 2 splits those into `val_edit` and `val_select` (250 per class each); the rest is `train` (4,500 per class). The split is identical for all arms and seeds.
+- **Index files** are saved under `data/splits/` (`train_indices.npy`, `val_edit_indices.npy`, `val_select_indices.npy`, plus `manifest.json` with counts, class counts, library versions and SHA-256 of each file); hashes go in the freeze manifest. Existing files are verified, never regenerated. The disjointness and sizes are asserted by tests.
 - **Preprocessing (all splits).** 32→224 bilinear resize, ImageNet mean/std normalization. Augmentation (train only): random crop 32 with padding 4, then horizontal flip, both before the resize.
 - **Evaluation precision.** All val_edit, val_select and test evaluation runs in eval mode in **fp32** (no AMP), so that the 0.002 acceptance threshold is not comparable to autocast noise. AMP is used only for training.
 - **Test-set access** is possible only through the guarded loader (Section 13). No WSP, search, tuning or selection code may import it.
 
 ## 4. Arms and what each may see
 
-**Common checkpoint (E0).** torchvision AlexNet with `AlexNet_Weights.IMAGENET1K_V1` (weight file SHA-256 recorded). `classifier.6` is replaced by `Linear(4096, 10)`, initialized from the run seed. Warm-up trains **only `classifier.6`** (all other parameters frozen, model in train mode so dropout is active): 10 epochs, batch size 128, SGD momentum 0.9, lr 0.01, weight decay 5e-4, cosine annealing to 0, AMP fp16, no label smoothing; checkpoint = last epoch (no validation-based selection). Total parameters: **57,044,810**. The checkpoint's SHA-256 is recorded, and every arm refuses to start if the hash is missing or mismatched. One E0 per seed (5 total).
+**Common checkpoint (E0).** torchvision AlexNet with `AlexNet_Weights.IMAGENET1K_V1` (weight file SHA-256 recorded). `classifier.6` is replaced by `Linear(4096, 10)`, initialized from the run seed. Warm-up trains **only `classifier.6`** (all other parameters frozen, model in train mode so dropout is active): 10 epochs, batch size 64, SGD momentum 0.9, lr 0.01, weight decay 5e-4, cosine annealing to 0, AMP fp16, no label smoothing; checkpoint = last epoch (no validation-based selection). Total parameters: **57,044,810**. The checkpoint's SHA-256 is recorded, and every arm refuses to start if the hash is missing or mismatched. One E0 per seed (5 total).
 
 | Arm | Description | Information it may use | Gradients? | LLM? |
 |---|---|---|---|---|
@@ -80,7 +80,7 @@ H1–H4 are tested as primary claims (Section 2). H5 and RQ6 are exploratory.
 
 **What E2/E3 see in the prompt (fixed template, hash in Section 10).** For each of the 16 parameter tensors: name, shape, mean, std, min, max, L2 norm; per-output-unit L2 norms for the 5 conv layers and `classifier.6`; 5/25/50/75/95th percentile of per-row norms for `classifier.1` and `classifier.4`. val_edit loss, accuracy, per-class accuracy, and the 10×10 confusion matrix. No images, no per-example predictions, no activations, no val_select, no test data. E3 differs from E2 **only** by the added gradient-diagnostic block.
 
-**Reference-only status of E1.** E1 is an unconstrained reference ("what conventional training achieves"), run for 10 epochs from E0 with batch size 128, SGD momentum 0.9, lr 0.001, weight decay 5e-4, cosine annealing to 0, AMP, best epoch by val_select accuracy. It is **not** a matched-budget competitor and no primary claim involves it. The main comparison is **WSP vs search under matched budgets** (E2 vs E5, E3 vs E7), plus **accuracy per edited parameter** (Section 7), reported against E1 and E6 descriptively.
+**Reference-only status of E1.** E1 is an unconstrained reference ("what conventional training achieves"), run for 10 epochs from E0 with batch size 64, SGD momentum 0.9, lr 0.001, weight decay 5e-4, cosine annealing to 0, AMP, best epoch by val_select accuracy. It is **not** a matched-budget competitor and no primary claim involves it. The main comparison is **WSP vs search under matched budgets** (E2 vs E5, E3 vs E7), plus **accuracy per edited parameter** (Section 7), reported against E1 and E6 descriptively.
 
 **Matched-budget rule.** E5 and E7 receive the full 40 candidate slots and the 3-consecutive-unproductive early stop is **disabled** for them. WSP arms may stop early (Section 9). This is deliberately conservative: it can only give the baselines more search than WSP. Accuracy-vs-candidates-used curves are reported for all arms.
 
@@ -188,7 +188,7 @@ The provider layer is abstracted so the model can be swapped, but swapping it af
 
 ## 13. Test-set rule
 
-1. The test set is reachable only via the guarded loader, which raises unless **both** an explicit final-eval flag **and** the frozen-protocol hash (Section "Freeze mechanics") are supplied and the hash matches the current manifest. Tests assert that WSP, search, tuning and selection modules cannot reach it.
+1. The test set is reachable only via the guarded loader, which raises `PermissionError` unless `results/FROZEN_PROTOCOL.lock` exists and the supplied final-eval token equals its SHA-256 (Section "Freeze mechanics"). Tests assert that WSP, search, tuning and selection modules cannot reach it.
 2. **Order:** all arms for all seeds (E0–E7, PC, A6 and every other planned run) are completed and their final checkpoints hashed and listed in the manifest. Only then is the test set evaluated, **once per frozen checkpoint**, in one pass; per-example predictions are saved to disk and all statistics are computed from the saved predictions, never from a re-evaluation.
 3. Any re-run, re-training, re-selection or protocol change made after any test result has been seen is reported in Section 16 and flagged in every table that depends on it.
 4. val_select is used only for final-checkpoint selection and E1 epoch selection; it is not used for prompt development, hyperparameter choice, or acceptance.

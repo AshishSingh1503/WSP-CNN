@@ -1,0 +1,19 @@
+# Data, checkpoints and raw outputs (large / regenerable)
+data/
+checkpoints/
+results/*
+!results/.gitkeep
+# keep small, reviewable run records
+!results/env.json
+
+# Secrets and environments
+.env
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+!results/checkpoints_registry.json
+!results/model_card.json
