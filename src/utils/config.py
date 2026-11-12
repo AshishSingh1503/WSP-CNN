@@ -36,6 +36,8 @@ class PathsConfig(_Frozen):
     diag_indices: str
     diag_manifest: str
     examples_dir: str
+    faults: str
+    pc_results_dir: str
 
 
 class DataConfig(_Frozen):
@@ -211,22 +213,26 @@ class LLMConfig(_Frozen):
     provider: str
     model: str
     temperature: float
+    send_temperature: bool
+    effort: str
     max_tokens: int
-
-
-class PositiveControlConfig(_Frozen):
-    f1_tensor: str
-    f1_channels: int
-    f1_seed_offset: int
-    f2_tensor: str
-    f2_class_index: int
-    f2_shift: float
-    f3_tensor: str
-    f3_channels: int
-    f3_seed_offset: int
-    min_val_select_drop_pp: float
-    repair_success_fraction: float
-    h4_null_rate: float
+    max_api_retries: int
+    backoff_base_seconds: float
+    backoff_max_seconds: float
+    repair_retries: int
+    max_calls_per_run: int
+    max_usd_per_run: float
+    cache_dir: str
+    prompt_pure: str
+    prompt_hybrid: str
+    inspect_enabled: bool
+    n_inspect: int
+    max_inspect_values: int
+    inspect_sig_figs: int
+    price_input_per_mtok: float
+    price_output_per_mtok: float
+    price_cache_read_per_mtok: float
+    price_cache_write_per_mtok: float
 
 
 class SeedsConfig(_Frozen):
@@ -264,7 +270,6 @@ class Config(_Frozen):
     dsl: DslConfig
     controls: ControlsConfig
     llm: LLMConfig
-    positive_control: PositiveControlConfig
     seeds: SeedsConfig
     stats: StatsConfig
     diagnostics: DiagnosticsConfig
@@ -286,3 +291,27 @@ def config_hash(cfg: Config) -> str:
 def resolve_path(rel: str | Path) -> Path:
     """Resolve a config path against the repo root (absolute paths pass through)."""
     return (REPO_ROOT / rel).resolve()
+
+
+class FaultSpecConfig(_Frozen):
+    """One injected fault (PROTOCOL.md Section 5)."""
+
+    kind: str                 # negate_channels | bias_shift | zero_channels
+    tensor: str               # layer (channels) or bias tensor
+    n_channels: int = 0
+    seed_offset: int = 0
+    class_index: int = -1
+    shift: float = 0.0
+
+
+class FaultsConfig(_Frozen):
+    faults: dict[str, FaultSpecConfig]
+    min_val_select_drop_pp: float
+    repair_success_fraction: float
+    h4_null_rate: float
+
+
+def load_faults(path: str | Path | None = None) -> FaultsConfig:
+    """Load configs/faults.yaml (kept separate from config.yaml so it never reaches prompt code)."""
+    target = Path(path) if path else resolve_path(load_config().paths.faults)
+    return FaultsConfig.model_validate(yaml.safe_load(target.read_text(encoding="utf-8")))

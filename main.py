@@ -60,12 +60,26 @@ def run_diag_example_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace
     run_diag_example(cfg, args.seed, log)
 
 
+def run_pure_wsp_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """E2: Pure WSP for ``--seed`` (``--dry-run`` uses the scripted FakeLLM)."""
+    from src.experiments.pure_wsp import run_pure_wsp
+    run_pure_wsp(cfg, args.seed, log, dry_run=args.dry_run)
+
+
+def run_positive_control_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """Positive control for ``--seed``: all faults, or just ``--fault NAME``."""
+    from src.experiments.positive_control import run_positive_control
+    run_positive_control(cfg, args.seed, log, fault=args.fault, dry_run=args.dry_run)
+
+
 EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]] = {
     "make_splits": run_make_splits,
     "check_data": run_check_data,
     "baseline": run_baseline_cmd,
     "finetune": run_finetune_cmd,
     "diag_example": run_diag_example_cmd,
+    "pure_wsp": run_pure_wsp_cmd,
+    "positive_control": run_positive_control_cmd,
 }
 
 
@@ -75,6 +89,8 @@ def main() -> None:
     parser.add_argument("--experiment", required=True, choices=sorted(EXPERIMENTS))
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
+    parser.add_argument("--dry-run", action="store_true", help="WSP arms: use the scripted FakeLLM (no API calls)")
+    parser.add_argument("--fault", default=None, help="positive_control: a single fault name from configs/faults.yaml")
     parser.add_argument("--sweep", action="store_true", help="finetune: run the seed-0 lr sweep")
     parser.add_argument("--reproduce-check", action="store_true",
                         help="baseline: retrain in memory and compare the hash with the registered one")

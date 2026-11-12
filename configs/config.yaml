@@ -18,6 +18,8 @@ paths:                       # relative paths resolve against the repo root
   diag_indices: data/splits/diag_indices.npy
   diag_manifest: data/splits/diag_manifest.json
   examples_dir: results/examples
+  faults: configs/faults.yaml
+  pc_results_dir: results/PC
 
 data:                        # PROTOCOL.md Section 3
   num_classes: 10
@@ -130,25 +132,30 @@ controls:
   e7_relative_steps: [0.005, 0.01, 0.02, 0.04]
   e7_max_entries: 64
 
-llm:                         # PROTOCOL.md Section 10
-  provider: anthropic
-  model: claude-opus-5-5
-  temperature: 0.0
+llm:                         # PROTOCOL.md Section 10 (+ Stage 6 agent settings); provider/model/key come from .env
+  provider: anthropic        # overridden by LLM_PROVIDER
+  model: claude-opus-5-5     # overridden by LLM_MODEL
+  temperature: 0.0           # recorded only: the API rejects temperature/top_p/top_k since 2026-10-21
+  send_temperature: false    # set true only for a provider that still accepts it
+  effort: medium             # output_config.effort (Opus 5.5 default); thinking itself cannot be disabled
   max_tokens: 16384
-
-positive_control:            # PROTOCOL.md Section 5
-  f1_tensor: features.10
-  f1_channels: 8
-  f1_seed_offset: 10000
-  f2_tensor: classifier.6.bias
-  f2_class_index: 3
-  f2_shift: -8.0
-  f3_tensor: features.3
-  f3_channels: 16
-  f3_seed_offset: 20000
-  min_val_select_drop_pp: 5.0
-  repair_success_fraction: 0.8
-  h4_null_rate: 0.2
+  max_api_retries: 5         # rate limit / 5xx / overload, exponential backoff
+  backoff_base_seconds: 2.0
+  backoff_max_seconds: 60.0
+  repair_retries: 1          # one repair retry on invalid JSON, then a failed proposal
+  max_calls_per_run: 60      # hard caps per run (real API calls only; cache hits are free)
+  max_usd_per_run: 10.0
+  cache_dir: results/llm_cache
+  prompt_pure: prompts/pure_wsp_v1.md
+  prompt_hybrid: prompts/hybrid_wsp_v1.md
+  inspect_enabled: true      # read-only weight inspection turns (ablation switch)
+  n_inspect: 3
+  max_inspect_values: 2048
+  inspect_sig_figs: 4
+  price_input_per_mtok: 4.0  # USD, claude-opus-5-5 list prices
+  price_output_per_mtok: 20.0
+  price_cache_read_per_mtok: 0.2
+  price_cache_write_per_mtok: 5.0
 
 seeds:
   primary: [0, 1, 2, 3, 4]

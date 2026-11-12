@@ -1,0 +1,20 @@
+# Positive-control faults (PROTOCOL.md Section 5). NEVER read by prompt-building or LLM code.
+faults:
+  F1_negate_features10:
+    kind: negate_channels      # negate weight AND bias of n_channels output channels
+    tensor: features.10
+    n_channels: 8
+    seed_offset: 10000         # channels drawn with default_rng(seed_offset + seed)
+  F2_bias_class3:
+    kind: bias_shift           # add `shift` to the bias of one class
+    tensor: classifier.6
+    class_index: 3
+    shift: -8.0
+  F3_zero_features3:
+    kind: zero_channels        # zero weight AND bias of n_channels output channels
+    tensor: features.3
+    n_channels: 16
+    seed_offset: 20000
+min_val_select_drop_pp: 5.0
+repair_success_fraction: 0.8
+h4_null_rate: 0.2

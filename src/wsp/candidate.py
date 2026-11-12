@@ -28,6 +28,7 @@ class CandidateBudget:
     max_evaluations: int
     evaluations_used: int = 0
     validator_rejections: int = 0
+    no_edits: int = 0
 
     @property
     def remaining(self) -> int:
@@ -38,11 +39,12 @@ class CandidateBudget:
 class CandidateResult:
     """Result for one proposal. ``model`` is the edited clone (None if the proposal was invalid)."""
 
-    status: Literal["invalid", "evaluated"]
+    status: Literal["invalid", "no_edit", "evaluated"]
     validation: ValidationResult
     edit_record: EditRecord | None = None
     metrics: dict[str, Any] | None = None
     model: nn.Module | None = field(default=None, repr=False)
+    eval_result: EvalResult | None = field(default=None, repr=False)
 
 
 def evaluate_candidate(model: nn.Module, raw_proposal: Any, ctx: ValidationContext,
@@ -59,6 +61,11 @@ def evaluate_candidate(model: nn.Module, raw_proposal: Any, ctx: ValidationConte
         result = CandidateResult("invalid", validation)
         _log(log, result)
         return result
+    if all(op.operation == "no_edit" for op in validation.proposal.operations):
+        budget.no_edits += 1
+        result = CandidateResult("no_edit", validation)
+        _log(log, result)
+        return result
     if budget.remaining <= 0:
         raise CandidateBudgetExhausted(f"all {budget.max_evaluations} candidate evaluations are used")
     candidate = clone_model(model)
@@ -66,7 +73,7 @@ def evaluate_candidate(model: nn.Module, raw_proposal: Any, ctx: ValidationConte
     scores = evaluate_fn(candidate)
     budget.evaluations_used += 1
     result = CandidateResult("evaluated", validation, record,
-                             {"val_edit_loss": scores.loss, "val_edit_accuracy": scores.accuracy}, candidate)
+                             {"val_edit_loss": scores.loss, "val_edit_accuracy": scores.accuracy}, candidate, scores)
     _log(log, result)
     return result
 
