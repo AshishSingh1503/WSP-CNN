@@ -33,6 +33,9 @@ class PathsConfig(_Frozen):
     e0_results_dir: str
     finetune_dir: str
     e1_results_dir: str
+    diag_indices: str
+    diag_manifest: str
+    examples_dir: str
 
 
 class DataConfig(_Frozen):
@@ -158,10 +161,30 @@ class LowRankConfig(_Frozen):
 
 class DslConfig(_Frozen):
     max_ops_per_candidate: int
+    allowed_layers: tuple[str, ...]
+    allowed_ops: tuple[str, ...]
     add_delta: AddDeltaConfig
     scale_output_channel: ScaleChannelConfig
     bias_shift: BiasShiftConfig
     low_rank_update: LowRankConfig
+
+
+class DiagnosticsConfig(_Frozen):
+    diag_per_class: int
+    weight_topk: int
+    dead_threshold: float
+    sparse_threshold: float
+    max_listed_channels: int
+    selectivity_layers: tuple[str, ...]
+    selectivity_top: int
+    ece_bins: int
+    confusion_top_pairs: int
+    max_misclassified: int
+    grad_topk: int
+    grad_top_pairs: int
+    max_chars: int
+    sig_figs: int
+    model_name: str
 
 
 class ControlsConfig(_Frozen):
@@ -232,6 +255,7 @@ class Config(_Frozen):
     positive_control: PositiveControlConfig
     seeds: SeedsConfig
     stats: StatsConfig
+    diagnostics: DiagnosticsConfig
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:

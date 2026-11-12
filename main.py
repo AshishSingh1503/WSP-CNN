@@ -14,9 +14,11 @@ from src.utils.logger import JsonlLogger
 def run_make_splits(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
     """Create (or verify) the stratified split files and print the manifest summary."""
     from src.data.dataset import make_splits
+    from src.data.dataset import ensure_diag_indices
     manifest = make_splits(cfg)
     for name, info in manifest["files"].items():
         print(f"{name:11s} n={info['count']:6d} sha256={info['sha256']}")
+    print(f"diag subset: {len(ensure_diag_indices(cfg))} val_edit images")
     log.log("make_splits", manifest=manifest)
 
 
@@ -52,11 +54,18 @@ def run_finetune_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) ->
         run_finetune(cfg, args.seed, log)
 
 
+def run_diag_example_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """Write example Pure/Hybrid packets for ``--seed`` and check determinism."""
+    from src.experiments.diag_example import run_diag_example
+    run_diag_example(cfg, args.seed, log)
+
+
 EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]] = {
     "make_splits": run_make_splits,
     "check_data": run_check_data,
     "baseline": run_baseline_cmd,
     "finetune": run_finetune_cmd,
+    "diag_example": run_diag_example_cmd,
 }
 
 

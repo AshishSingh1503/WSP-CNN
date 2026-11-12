@@ -15,6 +15,9 @@ paths:                       # relative paths resolve against the repo root
   e0_results_dir: results/E0
   finetune_dir: checkpoints/fine_tuning
   e1_results_dir: results/E1
+  diag_indices: data/splits/diag_indices.npy
+  diag_manifest: data/splits/diag_manifest.json
+  examples_dir: results/examples
 
 data:                        # PROTOCOL.md Section 3
   num_classes: 10
@@ -91,6 +94,8 @@ acceptance:                  # PROTOCOL.md Section 9
 
 dsl:                         # PROTOCOL.md Section 6
   max_ops_per_candidate: 3
+  allowed_layers: [features.0, features.3, features.6, features.8, features.10, classifier.1, classifier.4, classifier.6]
+  allowed_ops: [add_delta, scale_output_channel, bias_shift, low_rank_update, no_edit]
   add_delta:
     max_entries: 64
     max_abs_sigma_frac: 0.5
@@ -147,3 +152,20 @@ stats:                       # PROTOCOL.md Section 12
   n_primary_claims: 4
   min_effect_pp: 0.3
   min_positive_seeds: 4
+
+diagnostics:                 # Stage 4: diagnostic subset and packet limits (train/val_edit data only)
+  diag_per_class: 100        # 1,000 val_edit images
+  weight_topk: 3
+  dead_threshold: 0.99       # inactive on >= 99% of spatial positions
+  sparse_threshold: 0.9      # sparse = inactive fraction in [0.9, 0.99)
+  max_listed_channels: 20
+  selectivity_layers: [features.11, classifier.4]   # features.10 after ReLU; classifier[4] output
+  selectivity_top: 5
+  ece_bins: 15
+  confusion_top_pairs: 5
+  max_misclassified: 20
+  grad_topk: 3
+  grad_top_pairs: 5
+  max_chars: 25000
+  sig_figs: 4
+  model_name: "AlexNet (ImageNet-pretrained, CIFAR-10 head, 224px input)"

@@ -29,10 +29,11 @@ class EvalResult:
     images_per_sec: float
     predictions: np.ndarray = field(repr=False)
     labels: np.ndarray = field(repr=False)
+    confidences: np.ndarray = field(repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-serialisable metrics (no per-example arrays)."""
-        return {k: v for k, v in self.__dict__.items() if k not in ("predictions", "labels")}
+        return {k: v for k, v in self.__dict__.items() if k not in ("predictions", "labels", "confidences")}
 
 
 def _sync(device: torch.device) -> None:
@@ -75,7 +76,8 @@ def _summarise(logits: torch.Tensor, labels: torch.Tensor, num_classes: int, sec
                       macro_precision=float(prec), macro_recall=float(rec), macro_f1=float(f1),
                       per_class_accuracy=per_class, confusion_matrix=cm.tolist(), n=n,
                       seconds=seconds, images_per_sec=n / seconds if seconds > 0 else 0.0,
-                      predictions=p.astype(np.int64), labels=y.astype(np.int64))
+                      predictions=p.astype(np.int64), labels=y.astype(np.int64),
+                      confidences=logits.softmax(1).max(1).values.numpy().astype(np.float64))
 
 
 def metrics_from_logits(logits: torch.Tensor, labels: torch.Tensor, num_classes: int = 10) -> EvalResult:
