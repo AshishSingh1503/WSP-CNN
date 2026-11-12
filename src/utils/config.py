@@ -135,38 +135,50 @@ class AcceptanceConfig(_Frozen):
 
 
 class AddDeltaConfig(_Frozen):
-    max_entries: int
-    max_abs_sigma_frac: float
+    max_indices: int
+    max_abs_delta: float
+    rel_value_factor: float
+    rel_value_offset: float
 
 
 class ScaleChannelConfig(_Frozen):
     max_channels: int
-    factor_min: float
-    factor_max: float
+    scale_min: float
+    scale_max: float
+    allow_zero_channel: bool
 
 
 class BiasShiftConfig(_Frozen):
-    max_entries: int
-    max_abs_classifier: float
-    max_abs_other: float
+    max_indices: int
+    classifier_layer: str
+    max_bias_shift_classifier: float
+    max_bias_shift_other: float
 
 
 class LowRankConfig(_Frozen):
+    max_rank: int
     max_rows: int
     max_cols: int
-    max_rank: int
-    factor_abs_max: float
-    max_abs_sigma_frac: float
+    max_rel_norm: float
+
+
+class LimitsConfig(_Frozen):
+    max_id_chars: int
+    max_reason_chars: int
+    max_text_chars: int
+    max_evidence_items: int
+    max_evidence_item_chars: int
 
 
 class DslConfig(_Frozen):
-    max_ops_per_candidate: int
+    max_ops_per_proposal: int
     allowed_layers: tuple[str, ...]
     allowed_ops: tuple[str, ...]
     add_delta: AddDeltaConfig
     scale_output_channel: ScaleChannelConfig
     bias_shift: BiasShiftConfig
     low_rank_update: LowRankConfig
+    limits: LimitsConfig
 
 
 class DiagnosticsConfig(_Frozen):

@@ -92,27 +92,36 @@ acceptance:                  # PROTOCOL.md Section 9
   stop_after_unproductive: 3
   disable_early_stop_for: ["E4", "E5", "E7"]
 
-dsl:                         # PROTOCOL.md Section 6
-  max_ops_per_candidate: 3
+dsl:                         # Stage 5 edit DSL (supersedes the PROTOCOL.md Section 6 bounds; see Deviations)
+  max_ops_per_proposal: 3
   allowed_layers: [features.0, features.3, features.6, features.8, features.10, classifier.1, classifier.4, classifier.6]
   allowed_ops: [add_delta, scale_output_channel, bias_shift, low_rank_update, no_edit]
   add_delta:
-    max_entries: 64
-    max_abs_sigma_frac: 0.5
+    max_indices: 512
+    max_abs_delta: 0.05
+    rel_value_factor: 0.5    # |delta| <= factor * |current value| + offset
+    rel_value_offset: 0.01
   scale_output_channel:
     max_channels: 8
-    factor_min: -2.0
-    factor_max: 3.0
+    scale_min: 0.5
+    scale_max: 1.5
+    allow_zero_channel: false   # if true, a factor of exactly 0.0 is also allowed
   bias_shift:
-    max_entries: 16
-    max_abs_classifier: 10.0
-    max_abs_other: 1.0
-  low_rank_update:
-    max_rows: 16
-    max_cols: 32
-    max_rank: 2
-    factor_abs_max: 1.0
-    max_abs_sigma_frac: 0.5
+    max_indices: 16
+    classifier_layer: classifier.6
+    max_bias_shift_classifier: 1.0
+    max_bias_shift_other: 0.2
+  low_rank_update:           # delta = sum_i u_i (x) v_i on a rows x cols block of a Linear weight
+    max_rank: 4
+    max_rows: 32
+    max_cols: 64
+    max_rel_norm: 0.02       # ||delta||_F <= max_rel_norm * ||W||_F
+  limits:
+    max_id_chars: 64
+    max_reason_chars: 800
+    max_text_chars: 400      # expected_effect and risk
+    max_evidence_items: 20
+    max_evidence_item_chars: 200
 
 controls:
   e4_trials_per_seed: 5
