@@ -5,20 +5,19 @@ the packet builder, the prompt or the agent (a test scans the source to enforce 
 from __future__ import annotations
 
 import json
-import shutil
 from typing import Any
 
 import numpy as np
 import torch
 from torch import nn
 
-from src.experiments.wsp_common import WSPData, make_agent, make_settings, print_run_table, run_dirs
+from src.experiments.arms import run_controller
+from src.experiments.wsp_common import WSPData, print_run_table, run_dirs
 from src.models.checkpoint import clone_model, require_common_checkpoint
 from src.utils.config import Config, FaultSpecConfig, FaultsConfig, load_faults, resolve_path
 from src.utils.logger import JsonlLogger
 from src.utils.reproducibility import enable_deterministic, set_seed
 from src.wsp.bitwise import differs
-from src.wsp.wsp_controller import WSPController
 
 
 @torch.no_grad()
@@ -56,13 +55,10 @@ def localisation(edited: dict[str, torch.Tensor], faulted: dict[str, torch.Tenso
 
 
 def run_fault(cfg: Config, faults: FaultsConfig, name: str, seed: int, data: WSPData, clean: nn.Module,
-              log: JsonlLogger, dry_run: bool, device: torch.device) -> dict[str, Any]:
-    """One fault: inject, measure the drop, run Pure WSP from the faulted model, report recovery."""
-    arm = f"PC_{name}" + ("_DRY" if dry_run else "")
-    res_dir, ckpt_dir = run_dirs(cfg, arm, seed)
-    if dry_run:
-        shutil.rmtree(res_dir, ignore_errors=True)
-        shutil.rmtree(ckpt_dir, ignore_errors=True)
+              log: JsonlLogger, dry_run: bool, device: torch.device, method: str = "pure") -> dict[str, Any]:
+    """One fault: inject, measure the drop, run ``method`` from the faulted model, report recovery."""
+    suffix = {"pure": "", "hybrid": "_E3", "random": "_E5", "grad": "_E7"}[method]
+    arm = f"PC_{name}{suffix}"
     faulted = clone_model(clean)
     record = inject_fault(faulted, faults.faults[name], seed)
     f_masks = changed_masks(clean, faulted)
@@ -74,15 +70,14 @@ def run_fault(cfg: Config, faults: FaultsConfig, name: str, seed: int, data: WSP
     clean_sel, faulted_sel = data.eval_select(clean), data.eval_select(faulted)
     clean_edit, faulted_edit = data.eval_edit(clean), data.eval_edit(faulted)
     drop_pp = 100 * (clean_sel.accuracy - faulted_sel.accuracy)
-    precondition = drop_pp >= faults.min_val_select_drop_pp
-    settings = make_settings(cfg, arm, "pure")
-    agent = make_agent(cfg, "pure", settings, log, dry_run)
-    result = WSPController(cfg, settings, agent, faulted, data.eval_edit, data.eval_select, data.diag_batches,
-                           data.val_edit_indices, seed, res_dir, ckpt_dir, log, device).run()
+    result = run_controller(cfg, arm, method, seed, faulted, data, device, log, None, dry_run,
+                            tags={"pc_fault": name, "pc_method": method})
+    res_dir = run_dirs(cfg, result.arm, seed)[0]
     final_sel = result.states[result.final_index].val_select["accuracy"]
     final_edit = result.states[result.final_index].val_edit["accuracy"]
     rho = lambda clean_a, fault_a, final_a: (final_a - fault_a) / (clean_a - fault_a) if clean_a > fault_a else float("nan")  # noqa: E731
-    report = {"fault": name, "seed": seed, "arm": arm, "injected": record, "precondition_drop_ge_threshold": precondition,
+    report = {"fault": name, "method": method, "seed": seed, "arm": result.arm, "injected": record,
+              "precondition_drop_ge_threshold": drop_pp >= faults.min_val_select_drop_pp,
               "val_select": {"clean": clean_sel.accuracy, "faulted": faulted_sel.accuracy, "final": final_sel,
                              "drop_pp": drop_pp, "recovered_fraction": rho(clean_sel.accuracy, faulted_sel.accuracy, final_sel)},
               "val_edit": {"clean": clean_edit.accuracy, "faulted": faulted_edit.accuracy, "final": final_edit,
@@ -90,13 +85,13 @@ def run_fault(cfg: Config, faults: FaultsConfig, name: str, seed: int, data: WSP
               "localisation": localisation(changed_masks(faulted, result.final_model), f_masks),
               "stop_reason": result.stop_reason, "counts": result.counts, "cost": result.cost,
               "repair_success_threshold": faults.repair_success_fraction}
-    (spec_dir / "report.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
+    (spec_dir / f"report_{method}.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     print_run_table(res_dir / "history.jsonl")
     return report
 
 
 def run_positive_control(cfg: Config, seed: int, log: JsonlLogger, fault: str | None = None,
-                         dry_run: bool = False) -> list[dict[str, Any]]:
+                         dry_run: bool = False, method: str = "pure") -> list[dict[str, Any]]:
     """All faults (or one) for one seed; prints the recovery table."""
     faults = load_faults()
     names = [fault] if fault else list(faults.faults)
@@ -106,12 +101,12 @@ def run_positive_control(cfg: Config, seed: int, log: JsonlLogger, fault: str | 
     set_seed(seed)
     clean, _ = require_common_checkpoint(cfg, seed, device)
     data = WSPData(cfg, device)
-    reports = [run_fault(cfg, faults, n, seed, data, clean, log, dry_run, device) for n in names]
+    methods = ["pure", "random", "grad"] if method == "all" else [method]
+    reports = [run_fault(cfg, faults, n, seed, data, clean, log, dry_run, device, m) for n in names for m in methods]
     print(f"\nPOSITIVE CONTROL seed {seed} (val_select; test set not touched)")
-    print(f"{'fault':<24}{'clean':>7}{'faulted':>9}{'drop pp':>9}{'final':>7}{'recovered':>10}{'prec':>6}{'recall':>7}{'scalars':>8}")
+    print(f"{'fault':<22}{'method':<7}{'clean':>7}{'faulted':>9}{'drop pp':>9}{'final':>7}{'recovered':>10}{'prec':>6}{'recall':>7}{'scalars':>8}")
     for r in reports:
         v, loc = r["val_select"], r["localisation"]
-        print(f"{r['fault']:<24}{v['clean']:>7.4f}{v['faulted']:>9.4f}{v['drop_pp']:>9.2f}{v['final']:>7.4f}"
+        print(f"{r['fault']:<22}{r['method']:<7}{v['clean']:>7.4f}{v['faulted']:>9.4f}{v['drop_pp']:>9.2f}{v['final']:>7.4f}"
               f"{100 * v['recovered_fraction']:>9.1f}%{loc['precision']:>6.2f}{loc['recall']:>7.2f}{loc['edited_scalars']:>8}")
-    print("TODO (Stage 7): run E5-style random search on the same faulted models for comparison.")
     return reports

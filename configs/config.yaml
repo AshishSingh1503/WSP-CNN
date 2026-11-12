@@ -185,3 +185,30 @@ diagnostics:                 # Stage 4: diagnostic subset and packet limits (tra
   max_chars: 25000
   sig_figs: 4
   model_name: "AlexNet (ImageNet-pretrained, CIFAR-10 head, 224px input)"
+
+random_search:               # E5 / E6-RS proposal distributions (all within the DSL bounds)
+  max_ops: 1                 # operations per random proposal
+  param_weight_prob: 0.8     # add_delta targets the weight tensor (else the bias)
+  add_delta_max_entries: 32
+  add_delta_magnitude: [0.2, 1.0]    # fraction of the per-entry bound
+  scale_max_channels: 8
+  scale_min_deviation: 0.05          # |factor - 1| at least this
+  bias_max_indices: 8
+  bias_magnitude: [0.1, 1.0]         # fraction of the layer's bias-shift limit
+  low_rank_max_rank: 2
+  low_rank_max_rows: 8
+  low_rank_max_cols: 16
+  low_rank_norm_fraction: [0.2, 0.9] # fraction of the max relative norm
+  safety: 0.99                       # stay this fraction inside every bound
+  max_sampling_tries: 50
+
+grad_heuristic:              # E7: gradient-heuristic search without an LLM
+  top_k_channels: 4
+  alphas: [0.05, 0.1, 0.2]
+  bias_alphas: [0.05, 0.1, 0.2]      # one per iteration, cycling
+
+random_edit:                 # E4: random editing matched to the E2 edit set (no feedback)
+  samples_per_seed: 10
+  norm_tolerance: 0.10
+  max_attempts: 300
+  unit_magnitude: [0.5, 1.0]         # per-entry magnitude fraction before global rescaling

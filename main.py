@@ -69,7 +69,28 @@ def run_pure_wsp_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) ->
 def run_positive_control_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
     """Positive control for ``--seed``: all faults, or just ``--fault NAME``."""
     from src.experiments.positive_control import run_positive_control
-    run_positive_control(cfg, args.seed, log, fault=args.fault, dry_run=args.dry_run)
+    run_positive_control(cfg, args.seed, log, fault=args.fault, dry_run=args.dry_run, method=args.method)
+
+
+def _arm_cmd(arm: str, method: str, layers: tuple[str, ...] | None = None):
+    """Build an experiment function for one controller-driven arm."""
+    def run(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+        from src.experiments.arms import run_arm
+        run_arm(cfg, args.seed, log, arm, method, layers, dry_run=args.dry_run)
+    run.__doc__ = f"{arm}: {method} arm for --seed."
+    return run
+
+
+def run_random_edit_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """E4: random edit sets matched to the E2 result of --seed."""
+    from src.experiments.random_edit import run_random_edit
+    run_random_edit(cfg, args.seed, log)
+
+
+def run_audit_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """Budget audit over all run folders; exits non-zero on failure."""
+    from src.experiments.audit import main_audit
+    main_audit(cfg)
 
 
 EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]] = {
@@ -80,6 +101,13 @@ EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]
     "diag_example": run_diag_example_cmd,
     "pure_wsp": run_pure_wsp_cmd,
     "positive_control": run_positive_control_cmd,
+    "hybrid_wsp": _arm_cmd("E3", "hybrid"),
+    "random_edit": run_random_edit_cmd,
+    "random_search": _arm_cmd("E5", "random"),
+    "last_layer": _arm_cmd("E6", "pure", ("classifier.6",)),
+    "last_layer_rs": _arm_cmd("E6_RS", "random", ("classifier.6",)),
+    "grad_heuristic": _arm_cmd("E7", "grad"),
+    "audit": run_audit_cmd,
 }
 
 
@@ -90,6 +118,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     parser.add_argument("--dry-run", action="store_true", help="WSP arms: use the scripted FakeLLM (no API calls)")
+    parser.add_argument("--method", default="pure", choices=["pure", "hybrid", "random", "grad", "all"],
+                        help="positive_control: which proposer to run on the faulted model ('all' = pure, random, grad)")
     parser.add_argument("--fault", default=None, help="positive_control: a single fault name from configs/faults.yaml")
     parser.add_argument("--sweep", action="store_true", help="finetune: run the seed-0 lr sweep")
     parser.add_argument("--reproduce-check", action="store_true",

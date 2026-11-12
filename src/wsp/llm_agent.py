@@ -344,6 +344,7 @@ class LLMAgent:
         self.prompt_version, self.prompt_sha256 = path.stem, hashlib.sha256(raw).hexdigest()
         self.system = self._render(raw.decode("utf-8"))
         self.all_usages: list[Usage] = []
+        self.needs_packet = True
 
     def _render(self, template: str) -> str:
         c = self.cfg.llm
@@ -369,7 +370,8 @@ class LLMAgent:
             return response.text + "\n[reply truncated by max_tokens]"
         return response.text
 
-    def propose(self, packet_json: str, model: nn.Module, iteration: int) -> AgentResult:
+    def propose(self, packet_json: str, model: nn.Module, iteration: int,
+                ctx: dict[str, Any] | None = None) -> AgentResult:
         """One iteration: optional inspection turns, then proposals. Never raises on bad LLM output."""
         c, result = self.cfg.llm, AgentResult()
         messages: list[dict[str, Any]] = [{"role": "user", "content":

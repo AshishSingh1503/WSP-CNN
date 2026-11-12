@@ -221,3 +221,48 @@ _(Empty at freeze. Append dated entries only, newest last, in this format.)_
 - Were any test results seen before this change? yes / no
 - Affected claims / tables:
 ```
+
+### 2026-11-13 — D1: E0 warm-up recipe (Section 4)
+- What changed: E0 head warm-up now trains on cached 4096-d penultimate features (computed once, eval transform, NO augmentation, float16) with AdamW lr 1e-3, weight decay 1e-4, batch 256, 30 epochs, cosine schedule; the epoch with the best val_select accuracy is kept. Previously: SGD lr 0.01, 10 epochs, last epoch, with crop/flip augmentation.
+- Why: the backbone is frozen, so features can be computed once; this makes warm-up take seconds. Full-model forward vs cached-feature head agreement is checked (>= 99.5%; observed 100%).
+- Were any test results seen before this change? No (the test set has not been touched).
+- Affected claims / tables: E0 itself, and therefore every arm that starts from it.
+
+### 2026-11-13 — D2: val_select used for E0 epoch selection and E1 tuning (Sections 3 and 13)
+- What changed: val_select is also used (a) to pick the E0 epoch (D1) and (b) to score the E1 learning-rate sweep (seed 0 only) and select E1 epochs. Section 13 limited val_select to final-checkpoint selection and E1 epoch selection.
+- Why: val_select is the only held-out split besides test; the test set must stay untouched.
+- Were any test results seen? No.
+- Affected claims / tables: E0 and E1 only. No WSP or search arm uses val_select for acceptance (it is used only to select the final state among accepted ones, as in Section 9).
+
+### 2026-11-13 — D3: E1 recipe (Section 4)
+- What changed: E1 uses AdamW with two parameter groups (features at backbone_lr, classifier at classifier_lr), weight decay 0.01, 1 epoch linear warm-up then cosine decay, 15 epochs, AMP, batch 64, best epoch by val_select. Previously: SGD lr 0.001, 10 epochs, batch 128. The learning rates come from a seed-0 sweep over backbone_lr in {1e-5, 3e-5, 1e-4} and classifier_lr in {1e-4, 1e-3}, 8 epochs each, scored on val_select; results in results/E1/tuning_sweep.csv.
+- Chosen values: TO BE FILLED when the sweep finishes (see the commit that sets them in configs/config.yaml).
+- Were any test results seen? No.
+- Affected claims / tables: E1 only (reference arm, no primary claim).
+
+### 2026-11-13 — D4: Edit DSL bounds replaced (Section 6)
+- What changed: the Section 6 DSL is replaced by the Stage 5 DSL (configs/config.yaml `dsl:`, rendered in docs/EDIT_DSL.md): add_delta <= 512 indices with |delta| <= 0.05 and <= 0.5|value| + 0.01; scale_output_channel factors in [0.5, 1.5] (<= 8 channels, 0.0 only if allow_zero_channel); bias_shift <= 1.0 for classifier.6 and <= 0.2 elsewhere (<= 16 indices); low_rank_update rank <= 4 on a rows x cols block (<= 32 x 64) with ||update||_F <= 0.02 ||W||_F; <= 3 operations per proposal. Edit sizes are counted bitwise (a scalar counts if its stored bits change).
+- Why: the Section 6 factor range [-2, 3] and bias bound were chosen before implementation; the narrower, value-relative bounds keep single edits small.
+- Consequence: positive-control faults F1 (negate 8 channels: needs factor -1) and F2 (class bias -8: needs +8) can no longer be repaired exactly by one edit; F2 needs about 8 accepted bias shifts. F3 was never exactly repairable. PC results must be read with this in mind.
+- Were any test results seen? No.
+- Affected claims / tables: all editing arms; P-d.
+
+### 2026-11-13 — D5: LLM settings (Section 10)
+- What changed: temperature is NOT sent: since 2026-10-21 the Anthropic API rejects temperature, top_p and top_k on every model, so no sampling control exists ("temperature 0 or lowest supported" is not available). Effort is set to medium (the claude-opus-5-5 default); thinking cannot be disabled on this model. Replies are requested as JSON in the prompt and validated by Pydantic (no structured-output mode), with one repair retry. Per-run caps: 60 calls and USD 10. Every request/response is cached under results/llm_cache/ and replayed for identical requests.
+- Providers: LLM_PROVIDER/LLM_MODEL/key come from .env. The Anthropic provider with claude-opus-5-5 is the study model. A Groq / xAI / generic OpenAI-compatible provider also exists for pilot-only runs; any run on a model other than claude-opus-5-5 must be labelled pilot-only and excluded from the primary claims.
+- Were any test results seen? No.
+- Affected claims / tables: E2, E3, E6, PC.
+
+### 2026-11-13 — D6: Control arms (Section 4)
+- E4: K = 10 random edit sets per seed (was 5 trials), matched to the seed's E2 final edit set: same operation types, same scalar counts per layer type (Conv2d / Linear), global relative update norm within +-10%; evaluated once on val_select, no selection. If E2 made no edit for a seed, the median E2 edit set across seeds is used and noted.
+- E5: random valid proposals from the DSL (distributions in configs/config.yaml `random_search:`), same controller, 4 candidates x 10 iterations = 40 slots, same acceptance rule, no early stop (as in Section 4). E6-RS (E5 restricted to classifier.6) is added as the fair comparison for E6.
+- E7: replaces the Section 4 E7 recipe. Each iteration ranks output channels by ||grad W_c||_2 / sqrt(numel_c) on the 1,000-image diagnostic subset and proposes three scale_output_channel candidates with factor clip(1 - alpha * sign(<grad_c, w_c>)) for alpha in {0.05, 0.1, 0.2} on the top-4 channels, plus one bias_shift on classifier.6 with shifts -alpha * grad_b / max|grad_b| (alpha cycling over {0.05, 0.1, 0.2}); if nothing was accepted the next iteration moves down the ranking. Same controller, budgets and acceptance rule, no early stop.
+- E5 and E7 also run on the three PC faults with the same budgets.
+- Were any test results seen? No.
+- Affected claims / tables: P-b, P-c, exploratory comparisons.
+
+### 2026-11-13 — D7: Evaluation implementation (Sections 3 and 8)
+- What changed: val_edit and val_select are preprocessed once per process and held in RAM; every evaluation then runs the same fp32 model forward on those tensors. Numerics are identical to the loader path (same transform, same batches).
+- Why: a full val_edit pass through the image loader takes about 30 s on this laptop; the cached path takes a few seconds.
+- Were any test results seen? No.
+

@@ -273,6 +273,9 @@ class Config(_Frozen):
     seeds: SeedsConfig
     stats: StatsConfig
     diagnostics: DiagnosticsConfig
+    random_search: RandomSearchConfig
+    grad_heuristic: GradHeuristicConfig
+    random_edit: RandomEditConfig
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -291,6 +294,36 @@ def config_hash(cfg: Config) -> str:
 def resolve_path(rel: str | Path) -> Path:
     """Resolve a config path against the repo root (absolute paths pass through)."""
     return (REPO_ROOT / rel).resolve()
+
+
+class RandomSearchConfig(_Frozen):
+    max_ops: int
+    param_weight_prob: float
+    add_delta_max_entries: int
+    add_delta_magnitude: tuple[float, float]
+    scale_max_channels: int
+    scale_min_deviation: float
+    bias_max_indices: int
+    bias_magnitude: tuple[float, float]
+    low_rank_max_rank: int
+    low_rank_max_rows: int
+    low_rank_max_cols: int
+    low_rank_norm_fraction: tuple[float, float]
+    safety: float
+    max_sampling_tries: int
+
+
+class GradHeuristicConfig(_Frozen):
+    top_k_channels: int
+    alphas: tuple[float, ...]
+    bias_alphas: tuple[float, ...]
+
+
+class RandomEditConfig(_Frozen):
+    samples_per_seed: int
+    norm_tolerance: float
+    max_attempts: int
+    unit_magnitude: tuple[float, float]
 
 
 class FaultSpecConfig(_Frozen):

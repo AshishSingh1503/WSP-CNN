@@ -42,7 +42,8 @@ class WSPData:
         return evaluate(model, self.select_batches, self.device, amp=self.cfg.training.eval_amp, num_classes=self.cfg.data.num_classes)
 
 
-def make_settings(cfg: Config, arm: str, mode: str, allowed_layers: tuple[str, ...] | None = None) -> ControllerSettings:
+def make_settings(cfg: Config, arm: str, mode: str, allowed_layers: tuple[str, ...] | None = None,
+                  early_stop: bool = True) -> ControllerSettings:
     """Controller settings straight from config (budgets and acceptance rule of PROTOCOL.md Sections 8-9)."""
     b, a = cfg.budgets, cfg.acceptance
     return ControllerSettings(arm=arm, mode=mode, allowed_layers=allowed_layers or tuple(cfg.dsl.allowed_layers),  # type: ignore[arg-type]
@@ -50,7 +51,7 @@ def make_settings(cfg: Config, arm: str, mode: str, allowed_layers: tuple[str, .
                               max_iterations=b.max_iterations, candidates_per_iteration=b.candidates_per_iteration,
                               max_candidates=b.max_candidates, min_loss_decrease=a.min_loss_decrease,
                               require_accuracy_non_decrease=a.require_accuracy_non_decrease,
-                              stop_after_unproductive=a.stop_after_unproductive if arm not in a.disable_early_stop_for else None)
+                              stop_after_unproductive=a.stop_after_unproductive if early_stop else None)
 
 
 def dry_run_client() -> FakeLLM:

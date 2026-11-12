@@ -17,6 +17,7 @@ from src.training.evaluate import EvalResult
 from src.utils.config import Config, config_hash
 from src.utils.logger import JsonlLogger
 from src.utils.param_diff import diff_stats
+from src.utils.reproducibility import sha256_tensor_dict
 from src.wsp.budget import BudgetTracker, reference_params
 from src.wsp.candidate import (CandidateBudget, CandidateBudgetExhausted, CandidateResult, evaluate_candidate)
 from src.wsp.edit_validator import ValidationContext
@@ -84,6 +85,10 @@ def summarise(raw: Any) -> str:
         return str(raw)[:SUMMARY_CHARS]
 
 
+def _metrics(r: EvalResult) -> dict[str, float]:
+    return {"loss": r.loss, "accuracy": r.accuracy, "macro_f1": r.macro_f1}
+
+
 def _cpu_state(model: nn.Module) -> dict[str, torch.Tensor]:
     return {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
@@ -95,11 +100,11 @@ class WSPController:
                  start_model: nn.Module, eval_edit: Callable[[nn.Module], EvalResult],
                  eval_select: Callable[[nn.Module], EvalResult], diag_batches: list[Any],
                  val_edit_indices: np.ndarray, seed: int, run_dir: Path, ckpt_dir: Path,
-                 log: JsonlLogger, device: torch.device | str) -> None:
+                 log: JsonlLogger, device: torch.device | str, tags: dict[str, Any] | None = None) -> None:
         self.cfg, self.s, self.agent, self.start = cfg, settings, agent, protect_model(start_model)
         self.eval_edit, self.eval_select, self.diag = eval_edit, eval_select, diag_batches
         self.val_edit_indices, self.seed, self.run_dir, self.ckpt_dir = val_edit_indices, seed, run_dir, ckpt_dir
-        self.log, self.device = log, device
+        self.log, self.device, self.tags = log, device, tags or {}
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.history_path = self.run_dir / "history.jsonl"
 
@@ -136,8 +141,8 @@ class WSPController:
         sel0 = self.eval_select(self.start)
         tracker = BudgetTracker(reference_params(self.start), s.edit_budget)
         ctx = ValidationContext(cfg.dsl, s.allowed_layers, s.allowed_ops, s.edit_budget, tracker)
-        states = [StateRecord(0, 0, None, {"loss": cur_eval.loss, "accuracy": cur_eval.accuracy},
-                              {"loss": sel0.loss, "accuracy": sel0.accuracy}, 0)]
+        self.start_sha256 = sha256_tensor_dict(self.start.state_dict())
+        states = [StateRecord(0, 0, None, _metrics(cur_eval), _metrics(sel0), 0)]
         best_index, best_state = 0, _cpu_state(self.start)
         cand_budget, history = CandidateBudget(s.max_candidates), []
         counts = {"slots_used": 0, "iterations": 0, "accepted": 0, "failed_llm_outputs": 0}
@@ -149,10 +154,13 @@ class WSPController:
                 stop_reason = "candidate_budget"
                 break
             counts["iterations"] = it
-            text = self._packet_text(cur, cur_eval, it, tracker.remaining(cur),
-                                     s.max_candidates - counts["slots_used"], history)
+            remaining_edit = tracker.remaining(cur)
+            remaining_slots = s.max_candidates - counts["slots_used"]
+            text = (self._packet_text(cur, cur_eval, it, remaining_edit, remaining_slots, history)
+                    if getattr(self.agent, "needs_packet", True) else "")
+            ctx_info = {"remaining_edit_budget": remaining_edit, "remaining_slots": remaining_slots}
             try:
-                agent_res = self.agent.propose(text, cur, it)
+                agent_res = self.agent.propose(text, cur, it, ctx_info)
             except BudgetExceeded as err:
                 stop_reason = f"cost_cap: {err}"
                 self._write({"type": "stop", "iteration": it, "reason": stop_reason})
@@ -178,10 +186,8 @@ class WSPController:
             protect_model(cur)
             sel = self.eval_select(cur)
             counts["accepted"] += 1
-            states.append(StateRecord(len(states), it, res.edit_record.proposal_id,
-                                      {"loss": cur_eval.loss, "accuracy": cur_eval.accuracy},
-                                      {"loss": sel.loss, "accuracy": sel.accuracy},
-                                      tracker.count(cur)))
+            states.append(StateRecord(len(states), it, res.edit_record.proposal_id, _metrics(cur_eval),
+                                      _metrics(sel), tracker.count(cur)))
             self._write({"type": "accepted_state", "iteration": it, "state_index": states[-1].index,
                          "val_select": states[-1].val_select, "val_edit": states[-1].val_edit,
                          "checkpoint_sha256": res.edit_record.state_sha256})
@@ -239,7 +245,7 @@ class WSPController:
         final = clone_model(self.start)
         final.load_state_dict(best_state)
         diff = diff_stats(self.start, final)
-        usages = self.agent.all_usages if self.agent else []
+        usages = getattr(self.agent, "all_usages", []) if self.agent else []
         cost = {"llm_calls": len(usages), "real_calls": sum(not u.cached for u in usages),
                 "input_tokens": sum(u.input_tokens for u in usages), "output_tokens": sum(u.output_tokens for u in usages),
                 "cost_usd": sum(u.cost_usd for u in usages), "wall_seconds": time.perf_counter() - wall0,
@@ -251,7 +257,8 @@ class WSPController:
         meta = {"arm": self.s.arm, "seed": self.seed, "config_hash": config_hash(self.cfg),
                 "final_state_index": best_index, "states": [asdict(r) for r in states], "counts": counts}
         sha = save_checkpoint(final, self.ckpt_dir / "final.pt", meta)
-        summary = {"arm": self.s.arm, "seed": self.seed, "stop_reason": stop_reason, "final_index": best_index,
+        summary = {"arm": self.s.arm, "seed": self.seed, "tags": self.tags, "start_sha256": self.start_sha256,
+                   "settings": asdict(self.s), "stop_reason": stop_reason, "final_index": best_index,
                    "states": [asdict(r) for r in states], "counts": counts, "cost": cost,
                    "checkpoint_sha256": sha, "diff_global_rel_norm": diff["global_rel_norm"],
                    "diff_n_changed": diff["n_changed"], "diff_per_layer": diff["per_layer"]}
