@@ -63,7 +63,7 @@ def write_tables(cfg: Config, preds: Predictions, out_dir: Path | None = None, s
     overview, pcs = arm_overview(cfg, res), pc_summary(res["pc"])
     frames = {"arm_accuracy": res["accuracy"], "arm_overview": overview, "primary_claims": res["primary"],
               "per_seed_comparisons": per_seed, "comparison_summary": summary, "efficiency": res["efficiency"],
-              "run_costs": res["costs"], "pc_runs": res["pc"], "pc_summary": pcs}
+              "run_costs": res["costs"], "pc_runs": res["pc"], "pc_summary": pcs, "validation_accuracy": res["validation"]}
     for name, df in frames.items():
         df.to_csv(out / f"{name}.csv", index=False, float_format="%.10g")
     p_d = res["p_d"]
@@ -77,6 +77,8 @@ def write_tables(cfg: Config, preds: Predictions, out_dir: Path | None = None, s
         f"{p_d['excluded_runs']} runs excluded by the fault-drop precondition).",
         "## Exploratory comparisons (unadjusted)\n\n" + md_table(summary, 4),
         "## Per-seed paired differences (pp), bootstrap 95% CI and exact McNemar\n\n" + md_table(per_seed, 4),
+        "## Validation vs test accuracy (%, mean over seeds; val_select picks each final state, so it is optimistic)\n\n"
+        + md_table(res["validation"].assign(arm=res["validation"]["arm"].map(cfg.analysis.arm_labels)), 2),
         "## Parameter efficiency (gain over E0)\n\n" + md_table(res["efficiency"], 4),
         "## Positive control (mean over seeds)\n\n" + md_table(pcs, 3),
         "## Per-run cost\n\n" + md_table(res["costs"], 3),

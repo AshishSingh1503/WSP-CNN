@@ -174,6 +174,34 @@ def run_cost_table(cfg: Config, seeds: list[int]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def validation_table(cfg: Config, acc: pd.DataFrame, seeds: list[int]) -> pd.DataFrame:
+    """Validation accuracy (%) of each arm's final state, mean over seeds, next to test accuracy.
+
+    Editing arms: the state at ``final_index`` of the run summary. E0/E1: ``metrics.json``. E4: the mean over its random sets
+    (val_select only; it stores no per-state val_edit).
+    """
+    root, rows = resolve_path(cfg.paths.results_dir), []
+    test = acc.set_index("arm")["mean_acc"]
+    for arm in cfg.analysis.arms:
+        edit, select = [], []
+        for seed in seeds:
+            d = root / arm / f"seed{seed}"
+            if arm in ("E0", "E1"):
+                m = json.loads((d / "metrics.json").read_text(encoding="utf-8"))
+                edit.append(m["val_edit"]["accuracy"]); select.append(m["val_select"]["accuracy"])
+            elif arm == "E4":
+                s = json.loads((d / "summary.json").read_text(encoding="utf-8"))
+                edit.append(math.nan); select.append(s["aggregate"]["accuracy"]["mean"])
+            else:
+                s = json.loads((d / "summary.json").read_text(encoding="utf-8"))
+                final = s["states"][s["final_index"]]
+                edit.append(final["val_edit"]["accuracy"]); select.append(final["val_select"]["accuracy"])
+        sel_mean = 100 * float(np.mean(select))
+        rows.append({"arm": arm, "val_edit_acc": 100 * float(np.mean(edit)), "val_select_acc": sel_mean, "test_acc": float(test[arm]),
+                     "val_select_minus_test_pp": sel_mean - float(test[arm])})
+    return pd.DataFrame(rows)
+
+
 def efficiency_table(acc: pd.DataFrame, costs: pd.DataFrame, seeds: list[int]) -> pd.DataFrame:
     """Gain over E0 (pp), per 1,000 changed scalars and per unit relative update norm (mean over seeds)."""
     base = acc.set_index("arm").loc["E0", [f"seed{s}" for s in seeds]].to_numpy(dtype=float)
@@ -236,4 +264,5 @@ def build_all(cfg: Config, preds: Predictions, seeds: list[int] | None = None) -
     acc = arm_accuracy_table(cfg, preds, seeds)
     costs = run_cost_table(cfg, seeds)
     return {"seeds": seeds, "comparisons": comps, "primary": pd.DataFrame([*primary, pd_row]), "p_d": p_d, "pc": pc_df,
-            "accuracy": acc, "costs": costs, "efficiency": efficiency_table(acc, costs, seeds)}
+            "accuracy": acc, "costs": costs, "efficiency": efficiency_table(acc, costs, seeds),
+            "validation": validation_table(cfg, acc, seeds)}

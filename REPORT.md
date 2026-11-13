@@ -8,6 +8,7 @@ Status: DRAFT. Every number below is copied from a generated file in `results/ta
 - **Main result: a null result.** None of the three pre-registered accuracy claims is supported (P-a E2 vs E0, P-b E2 vs E5, P-c E3 vs E7). The mean paired differences are −0.016, −0.016 and −0.050 percentage points (pp), with 95 % intervals that include zero and lie well below the 0.3 pp minimum effect.
 - **Why the differences are so small.** In most runs the final state is the unedited start model. E2 ended with an edit on 1 of 5 seeds, E3 on 1, E6 on 1, E7 on 2, and E5 and E6-RS on none. Where an edit was kept, the test change was between −0.08 and +0.30 pp.
 - **Positive control (P-d): not supported.** Pure WSP reached the 80 % recovery criterion on 5 of 15 injected faults (exact one-sided binomial p = 0.164 against a 0.20 null; Holm p = 0.657). All five successes were the single-bias fault F2 (5/5); the channel-level faults F1 and F3 were 0/5 each.
+- **Validation tells the same story, and validation runs optimistic.** On the validation splits the edit arms differ from the unedited start by at most 0.11 pp (`val_select` 84.10 % for E0 vs 84.11 % for E2 and E3 and 84.21 % for E7), which is smaller than the 0.14–0.20 pp by which validation exceeds test for every arm except E1 (0.49 pp). A validation gain of this size is not evidence of a test gain (Section 3.5).
 - **Reference.** Full fine-tuning (E1) gains +8.43 pp (95 % interval 8.17 to 8.69 over seeds) and changes essentially all 57,044,809 scalars, so the gap that edits of at most 0.1 % of the weights could address under our DSL is not reached by any edit arm.
 
 ## 2. What was tested
@@ -90,6 +91,24 @@ Figure: `results/figures/fig7_pc_recovery.png`.
 ### 3.4 Cost and efficiency
 
 Sources: `results/tables/run_costs.csv`, `results/tables/efficiency.csv`. Mean LLM cost per seed is USD 0.65 (E2), 0.67 (E3) and 0.72 (E6); a run took 95–392 s of wall time. E1 took 1,396–2,126 s per seed and no LLM cost. Gain per 1,000 changed scalars in `efficiency.csv` is not interpretable for the edit arms because gains are 0 or within noise, and the large ratios for E3 and E6 come from means of 1.6 and 0.8 changed scalars. Figures: `fig3_gain_vs_changed_scalars.png`, `fig8_cost.png`.
+
+### 3.5 Validation accuracy vs test accuracy
+
+Source: `results/tables/validation_accuracy.csv` (also in `results.md`). Accuracy (%) of each arm's final state, mean over 5 seeds. `val_select` picks the final state of every arm, so it is optimistic by construction; E1 also picks its best epoch on it. E4 is the mean over its random edit sets and stores no per-state `val_edit`.
+
+| Arm | val_edit % | val_select % | Test % | val_select − test (pp) |
+|---|---|---|---|---|
+| E0 common start | 83.10 | 84.10 | 83.93 | 0.17 |
+| E1 full fine-tune (ref) | 92.86 | 92.85 | 92.36 | 0.49 |
+| E2 Pure WSP | 83.14 | 84.11 | 83.91 | 0.20 |
+| E3 Hybrid WSP | 83.12 | 84.11 | 83.95 | 0.16 |
+| E4 random edit | – | 82.81 | 82.86 | −0.05 |
+| E5 random search | 83.10 | 84.10 | 83.93 | 0.17 |
+| E6 last-layer WSP | 83.14 | 84.11 | 83.97 | 0.14 |
+| E6-RS last-layer random | 83.10 | 84.10 | 83.93 | 0.17 |
+| E7 gradient heuristic | 83.23 | 84.21 | 84.00 | 0.20 |
+
+Finding: validation and test agree that no edit arm moved accuracy by a meaningful amount, and the validation differences between arms (0.00 to 0.11 pp in `val_select`) are smaller than the validation-to-test gap (0.14 to 0.20 pp for every arm except E1). The clearest single illustration is E2 on seed 4: its kept edit raised `val_select` from 84.00 % to 84.08 % (+0.08 pp, from the run summary) and lowered test accuracy by 0.08 pp (Section 3.1). E7 shows the only visible validation movement among edit arms (84.00 → 84.40 % on seed 2 and 84.36 → 84.52 % on seed 3, from the run summaries), and its test changes on those seeds were +0.30 and +0.07 pp; no claim about E7 was pre-registered, and the validation numbers are not a test result.
 
 ## 4. What did NOT work
 

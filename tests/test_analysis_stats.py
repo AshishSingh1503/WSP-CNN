@@ -9,7 +9,7 @@ from scipy import stats as sps
 
 from src.analysis import stats as st
 from src.analysis import tables as tb
-from src.utils.config import load_config
+from src.utils.config import load_config, resolve_path
 from tests.test_stage8 import cfg_in
 
 CFG = load_config()
@@ -122,6 +122,34 @@ def synthetic_costs(arms, seeds):
     return pd.DataFrame(rows)
 
 
+def synthetic_validation(cfg, acc, seeds):
+    test = acc.set_index("arm")["mean_acc"]
+    return pd.DataFrame([{"arm": a, "val_edit_acc": 80.0, "val_select_acc": float(test[a]) + 0.2, "test_acc": float(test[a]),
+                          "val_select_minus_test_pp": 0.2} for a in cfg.analysis.arms])
+
+
+def test_validation_table_reads_final_state_and_e4_aggregate(tmp_path) -> None:
+    cfg, seeds = cfg_in(tmp_path), [0, 1]
+    root = resolve_path(cfg.paths.results_dir)
+    for s in seeds:
+        for arm in cfg.analysis.arms:
+            d = root / arm / f"seed{s}"
+            d.mkdir(parents=True, exist_ok=True)
+            if arm in ("E0", "E1"):
+                (d / "metrics.json").write_text(json.dumps({"val_edit": {"accuracy": 0.80}, "val_select": {"accuracy": 0.84}}))
+            elif arm == "E4":
+                (d / "summary.json").write_text(json.dumps({"aggregate": {"accuracy": {"mean": 0.83}}}))
+            else:
+                states = [{"val_edit": {"accuracy": 0.80}, "val_select": {"accuracy": 0.84}},
+                          {"val_edit": {"accuracy": 0.82}, "val_select": {"accuracy": 0.85}}]
+                (d / "summary.json").write_text(json.dumps({"states": states, "final_index": 1 if arm == "E2" else 0}))
+    acc = pd.DataFrame({"arm": list(cfg.analysis.arms), "mean_acc": [83.0] * len(cfg.analysis.arms)})
+    v = st.validation_table(cfg, acc, seeds).set_index("arm")
+    assert v.loc["E2", "val_select_acc"] == pytest.approx(85.0) and v.loc["E2", "val_edit_acc"] == pytest.approx(82.0)
+    assert v.loc["E5", "val_select_acc"] == pytest.approx(84.0) and v.loc["E0", "val_select_minus_test_pp"] == pytest.approx(1.0)
+    assert v.loc["E4", "val_select_acc"] == pytest.approx(83.0) and math.isnan(v.loc["E4", "val_edit_acc"])
+
+
 def test_accuracy_and_efficiency_tables(monkeypatch) -> None:
     seeds = [0, 1]
     arrays = {}
@@ -193,11 +221,12 @@ def test_write_tables_end_to_end_and_deterministic(tmp_path, monkeypatch) -> Non
         for arm in cfg.analysis.arms:
             preds.arrays[(arm, s)] = better if arm in ("E2", "E3") else base
     monkeypatch.setattr(st, "run_cost_table", lambda c, sd: synthetic_costs(c.analysis.arms, sd))
+    monkeypatch.setattr(st, "validation_table", synthetic_validation)
     out1, out2 = tmp_path / "t1", tmp_path / "t2"
     r1 = tb.write_tables(cfg, preds, out1, seeds)
     tb.write_tables(cfg, preds, out2, seeds)
     names = {"arm_accuracy", "arm_overview", "primary_claims", "per_seed_comparisons", "comparison_summary", "efficiency",
-             "run_costs", "pc_runs", "pc_summary"}
+             "run_costs", "pc_runs", "pc_summary", "validation_accuracy"}
     for n in names:
         assert (out1 / f"{n}.csv").read_text() == (out2 / f"{n}.csv").read_text()      # reproducible byte for byte
     assert (out1 / "results.md").read_text() == (out2 / "results.md").read_text()

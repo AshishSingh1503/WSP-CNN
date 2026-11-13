@@ -10,7 +10,8 @@ from src.analysis import figures as fg
 from src.analysis import stats as st
 from src.analysis import tables as tb
 from src.utils.config import load_config, resolve_path
-from tests.test_analysis_stats import Fake, arrays_with_gain, fast_cfg, pc_predictions, synthetic_costs, write_pc_files
+from tests.test_analysis_stats import (Fake, arrays_with_gain, fast_cfg, pc_predictions, synthetic_costs, synthetic_validation,
+                                       write_pc_files)
 from tests.test_stage8 import cfg_in
 
 CFG = load_config()
@@ -91,6 +92,7 @@ def test_all_figures_render_to_png_and_pdf(tmp_path, monkeypatch) -> None:
             preds.arrays[(arm, s)] = better if arm == "E2" else base
             preds._m[(arm, s)] = {"macro_f1": 0.8, "accuracy": 0.8, "per_class_accuracy": (np.arange(10) / 10 + (0.02 if arm == "E2" else 0)).tolist()}
     monkeypatch.setattr(st, "run_cost_table", lambda c, sd: synthetic_costs(c.analysis.arms, sd))
+    monkeypatch.setattr(st, "validation_table", synthetic_validation)
     out = tmp_path / "figs"
     res = tb.write_tables(cfg, preds, tmp_path / "tables", SEEDS)
     paths = fg.make_all(cfg, preds, res, res["frames"], out)
@@ -122,6 +124,7 @@ def test_reproduce_is_byte_identical_and_check_detects_changes(tmp_path, monkeyp
             preds.arrays[(arm, s)] = better if arm == "E2" else base
             preds._m[(arm, s)] = {"macro_f1": 0.8, "accuracy": 0.8, "per_class_accuracy": (np.arange(10) / 10).tolist()}
     monkeypatch.setattr(st, "run_cost_table", lambda c, sd: synthetic_costs(c.analysis.arms, sd))
+    monkeypatch.setattr(st, "validation_table", synthetic_validation)
     first = rp.reproduce(cfg, preds, tmp_path / "a" / "tables", tmp_path / "a" / "figures", SEEDS)
     second = rp.reproduce(cfg, preds, tmp_path / "b" / "tables", tmp_path / "b" / "figures", SEEDS)
     assert first == second and any(k.endswith(".png") for k in first) and any(k.endswith(".pdf") for k in first)
