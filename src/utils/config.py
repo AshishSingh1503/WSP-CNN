@@ -199,6 +199,9 @@ class DiagnosticsConfig(_Frozen):
     max_chars: int
     sig_figs: int
     model_name: str
+    include_activation_stats: bool
+    include_weight_stats: bool
+    include_confusion: bool
 
 
 class ControlsConfig(_Frozen):
@@ -277,6 +280,8 @@ class Config(_Frozen):
     grad_heuristic: GradHeuristicConfig
     random_edit: RandomEditConfig
     run_all: RunAllConfig
+    analysis: AnalysisConfig
+    ablations: AblationsConfig
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -335,6 +340,46 @@ class RunAllConfig(_Frozen):
     progress_file: str
     progress_json: str
     logs_dir: str
+    stall_minutes: float
+    poll_seconds: float
+    resumable_steps: tuple[str, ...]
+    stall_retries: int
+
+
+class ComparisonConfig(_Frozen):
+    id: str
+    a: str
+    b: str
+
+
+class AnalysisConfig(_Frozen):
+    arms: tuple[str, ...]
+    arm_labels: dict[str, str]
+    primary: tuple[ComparisonConfig, ...]
+    exploratory: tuple[ComparisonConfig, ...]
+    ci_level: float
+    bootstrap_chunk: int
+    tables_dir: str
+    figures_dir: str
+    colors: dict[str, str]
+    surface: str
+    ink: str
+    ink_secondary: str
+    grid: str
+
+
+class AblationDef(_Frozen):
+    method: str
+    overrides: dict[str, Any] = {}
+    allowed_layers: tuple[str, ...] | None = None
+    env: dict[str, str] = {}
+
+
+class AblationsConfig(_Frozen):
+    seeds: tuple[int, ...]
+    arm_prefix: str
+    defs: dict[str, AblationDef]
+    references: dict[str, tuple[str, ...]]
 
 
 class FaultSpecConfig(_Frozen):
@@ -359,3 +404,17 @@ def load_faults(path: str | Path | None = None) -> FaultsConfig:
     """Load configs/faults.yaml (kept separate from config.yaml so it never reaches prompt code)."""
     target = Path(path) if path else resolve_path(load_config().paths.faults)
     return FaultsConfig.model_validate(yaml.safe_load(target.read_text(encoding="utf-8")))
+
+
+def apply_overrides(cfg: Config, overrides: dict[str, Any]) -> Config:
+    """New validated Config with dotted-path overrides (e.g. ``{"budgets.max_iterations": 1}``) applied."""
+    raw = cfg.model_dump(mode="json")
+    for dotted, value in overrides.items():
+        *parents, leaf = dotted.split(".")
+        node = raw
+        for key in parents:
+            node = node[key]
+        if leaf not in node:
+            raise KeyError(f"unknown config key {dotted!r}")
+        node[leaf] = value
+    return Config.model_validate(raw)

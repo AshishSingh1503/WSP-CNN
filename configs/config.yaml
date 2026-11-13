@@ -67,8 +67,8 @@ e0:                          # common checkpoint: head-only warm-up on cached fe
 
 e1:                          # full fine-tuning reference (Stage 3)
   epochs: 15
-  backbone_lr: 0.00003       # PRE-SWEEP DEFAULT: replaced by the seed-0 val_select sweep winner
-  classifier_lr: 0.001       # PRE-SWEEP DEFAULT: replaced by the seed-0 val_select sweep winner
+  backbone_lr: 0.0001        # seed-0 val_select sweep winner (2026-11-13; see PROTOCOL.md D3)
+  classifier_lr: 0.001       # seed-0 val_select sweep winner (2026-11-13; see PROTOCOL.md D3)
   weight_decay: 0.01
   warmup_epochs: 1           # linear warm-up, then cosine to 0 (stepped per batch)
   schedule: cosine
@@ -185,6 +185,9 @@ diagnostics:                 # Stage 4: diagnostic subset and packet limits (tra
   max_chars: 25000
   sig_figs: 4
   model_name: "AlexNet (ImageNet-pretrained, CIFAR-10 head, 224px input)"
+  include_activation_stats: true   # ablation A1 switches this off
+  include_weight_stats: true       # ablation A2
+  include_confusion: true          # ablation A3
 
 random_search:               # E5 / E6-RS proposal distributions (all within the DSL bounds)
   max_ops: 1                 # operations per random proposal
@@ -231,3 +234,54 @@ run_all:                     # scripts/run_all.py
   progress_file: results/progress.md
   progress_json: results/progress.json
   logs_dir: results/logs/run_all
+  stall_minutes: 15          # kill a step whose log has been silent this long (hung data-loader workers)
+  poll_seconds: 30
+  resumable_steps: [E1]      # steps that can safely restart after a stall (E1 resumes from resume.pt)
+  stall_retries: 2
+
+analysis:                    # Stage 9: statistics, tables, figures (everything is generated from files)
+  arms: [E0, E1, E2, E3, E4, E5, E6, E6_RS, E7]
+  arm_labels: {E0: "E0 common start", E1: "E1 full fine-tune (ref)", E2: "E2 Pure WSP", E3: "E3 Hybrid WSP",
+               E4: "E4 random edit", E5: "E5 random search", E6: "E6 last-layer WSP", E6_RS: "E6-RS last-layer random",
+               E7: "E7 gradient heuristic"}
+  primary:                   # P-d (positive-control repair rate) is tested separately (binomial)
+    - {id: P-a, a: E2, b: E0}
+    - {id: P-b, a: E2, b: E5}
+    - {id: P-c, a: E3, b: E7}
+  exploratory:
+    - {id: X-1, a: E3, b: E2}
+    - {id: X-2, a: E1, b: E0}
+    - {id: X-3, a: E2, b: E4}
+    - {id: X-4, a: E6, b: E6_RS}
+  ci_level: 0.95
+  bootstrap_chunk: 250
+  tables_dir: results/tables
+  figures_dir: results/figures
+  # validated reference palette (dataviz skill), fixed per arm so colour follows the entity; E0 is neutral ink
+  colors: {E0: "#898781", E1: "#e34948", E2: "#2a78d6", E3: "#eb6834", E4: "#6250d6", E5: "#1baf7a",
+           E6: "#e87ba4", E6_RS: "#008300", E7: "#eda100"}
+  surface: "#fcfcfb"
+  ink: "#0b0b0b"
+  ink_secondary: "#52514e"
+  grid: "#e1e0d9"
+
+ablations:                   # Stage 9 Part B: validation-only, exploratory; each is a config override of the Pure WSP arm
+  seeds: [0, 1, 2]
+  arm_prefix: ABL
+  defs:
+    A1: {method: pure, overrides: {diagnostics.include_activation_stats: false}}
+    A2: {method: pure, overrides: {diagnostics.include_weight_stats: false}}
+    A3: {method: pure, overrides: {diagnostics.include_confusion: false}}
+    A5_conv: {method: pure, allowed_layers: [features.0, features.3, features.6, features.8, features.10]}
+    A5_classifier: {method: pure, allowed_layers: [classifier.1, classifier.4, classifier.6]}
+    A6_0.001pct: {method: pure, overrides: {budgets.edit_budget_fraction: 0.00001}}
+    A6_0.01pct: {method: pure, overrides: {budgets.edit_budget_fraction: 0.0001}}
+    A6_1pct: {method: pure, overrides: {budgets.edit_budget_fraction: 0.01}}
+    A7_second_llm: {method: pure, env: {LLM_MODEL: claude-sonnet-5-5},
+                    overrides: {llm.model: claude-sonnet-5-5, llm.price_input_per_mtok: 2.0, llm.price_output_per_mtok: 10.0,
+                                llm.price_cache_read_per_mtok: 0.2, llm.price_cache_write_per_mtok: 2.5}}   # Sonnet 5.5 list prices
+    A8_single_step: {method: pure, overrides: {budgets.max_iterations: 1, budgets.max_candidates: 4}}
+    A9_no_inspection: {method: pure, overrides: {llm.inspect_enabled: false}}
+  references:                # existing arms reused as ablation rows (no new runs)
+    A4_pure_vs_hybrid: [E2, E3]
+    A6_0.1pct_default: [E2]

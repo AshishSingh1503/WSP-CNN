@@ -236,7 +236,8 @@ _(Empty at freeze. Append dated entries only, newest last, in this format.)_
 
 ### 2026-11-13 — D3: E1 recipe (Section 4)
 - What changed: E1 uses AdamW with two parameter groups (features at backbone_lr, classifier at classifier_lr), weight decay 0.01, 1 epoch linear warm-up then cosine decay, 15 epochs, AMP, batch 64, best epoch by val_select. Previously: SGD lr 0.001, 10 epochs, batch 128. The learning rates come from a seed-0 sweep over backbone_lr in {1e-5, 3e-5, 1e-4} and classifier_lr in {1e-4, 1e-3}, 8 epochs each, scored on val_select; results in results/E1/tuning_sweep.csv.
-- Chosen values: TO BE FILLED when the sweep finishes (see the commit that sets them in configs/config.yaml).
+- Sweep result (seed 0, 8 epochs, best val_select accuracy per config): 1e-5/1e-4 0.9060; 1e-5/1e-3 0.9024; 3e-5/1e-4 0.9112; 3e-5/1e-3 0.9120; 1e-4/1e-4 0.9208; 1e-4/1e-3 0.9220 (backbone_lr/classifier_lr).
+- Chosen values: backbone_lr = 1e-4, classifier_lr = 1e-3 (highest val_select accuracy; ties would have gone to the smaller rates). The margin over 1e-4/1e-4 is 0.12 points, within noise for 2,500 images; the winner sits at the upper edge of the backbone grid, so a higher backbone rate was not explored. Set in configs/config.yaml on 2026-11-13.
 - Were any test results seen? No.
 - Affected claims / tables: E1 only (reference arm, no primary claim).
 
@@ -272,4 +273,12 @@ _(Empty at freeze. Append dated entries only, newest last, in this format.)_
 - Why: 5 seeds of full checkpoints would need roughly 20 GB on a disk that has 2-13 GB free; the edits are at most 57,044 scalars.
 - Were any test results seen? No.
 - Affected claims / tables: none (storage and evaluation mechanics only).
+
+### 2026-11-13 — D9: execution differences found while running seeds 0-4 (Sections 4, 11)
+- E5 (random search) was run once per seed (1 run, 40 candidate slots), not 5 runs per seed averaged. E6-RS likewise.
+- E2 made an edit on only 1 of 5 seeds (seed 4: a 40,970-scalar edit of the classifier.6 head); on the other 4 seeds its final state is the unedited start model because the accepted candidates tied the start on val_select. E4 therefore borrows seed 4's E2 edit set for all seeds, by the rule "if E2 made no edits for a seed, use the median E2 edit set across seeds" (n = 1 available). E4 matches scalars per layer type approximately for scale operations (a channel is a whole row) and the relative norm within +-10%.
+- Positive control, seed 0: the three E5 runs were invalidated by a bug (a CUDA tensor converted with .numpy() crashed every add_delta iteration), quarantined in results/_quarantine_cuda_numpy_bug/, and rerun with the fixed code. E7 seed 4 was killed mid-run when the session ended and was rerun from scratch (partial output in results/_quarantine_interrupted_session/). E5 seed 3 failed at startup (transient CUDA out-of-memory while pinning cached validation images) and was rerun; pinning of cached validation batches was then switched off (no numerical effect).
+- E1 seed 1 stalled twice (data-loader worker processes accumulating under memory pressure) and resumed from its epoch-4/5 resume file; E1 data loaders were then made non-persistent. Resuming restores model, optimizer, scaler, scheduler and RNG state, so the schedule is unchanged, but the resumed epochs are not bitwise-identical to an uninterrupted run.
+- Were any test results seen before these changes? No.
+- Affected claims / tables: P-b, P-c and exploratory comparisons involving E4/E5/E6-RS; P-d (the seed-0 E5 PC rows come from the rerun).
 

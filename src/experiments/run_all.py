@@ -15,6 +15,7 @@ from src.utils.hashing import sha256_file
 
 EXPERIMENT = {"E0": "baseline", "E1": "finetune", "PC": "positive_control", "E2": "pure_wsp", "E3": "hybrid_wsp",
               "E4": "random_edit", "E5": "random_search", "E6": "last_layer", "E6_RS": "last_layer_rs", "E7": "grad_heuristic"}
+ARM_STEPS = ("E2", "E3", "E5", "E6", "E6_RS", "E7")  # controller arms: history.jsonl appears once a run has begun
 PC_SUFFIX = {"pure": "", "hybrid": "_E3", "random": "_E5", "grad": "_E7"}
 
 
@@ -164,15 +165,49 @@ def _cost_of(cfg: Config, step: str, seed: int) -> float:
     return total
 
 
+STALL_EXIT_CODE = 124
+
+
+def run_with_watchdog(cmd: list[str], log: Path, stall_seconds: float, poll_seconds: float, append: bool = False) -> int:
+    """Run ``cmd`` writing to ``log``; kill it if the log is silent for ``stall_seconds`` (returns 124)."""
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with log.open("a" if append else "w", encoding="utf-8") as fh:
+        proc = subprocess.Popen(cmd, cwd=REPO_ROOT, stdout=fh, stderr=subprocess.STDOUT)
+        last_size, last_change = -1, time.monotonic()
+        while proc.poll() is None:
+            time.sleep(poll_seconds)
+            size = log.stat().st_size
+            if size != last_size:
+                last_size, last_change = size, time.monotonic()
+            elif time.monotonic() - last_change > stall_seconds:
+                proc.kill()
+                proc.wait()
+                fh.write(f"\nWATCHDOG: no output for {stall_seconds:.0f}s; process killed\n")
+                return STALL_EXIT_CODE
+        return proc.returncode
+
+
 def run_step(cfg: Config, step: str, seed: int) -> int:
-    """Run one (step, seed) in a fresh process (isolates crashes and frees memory); returns its exit code."""
+    """Run one (step, seed) in a fresh process (isolates crashes and frees memory); returns its exit code.
+
+    A step whose log goes silent (hung data-loader workers) is killed; resumable steps are retried.
+    """
     cmd = [sys.executable, str(REPO_ROOT / "main.py"), "--experiment", EXPERIMENT[step], "--seed", str(seed)]
     if step == "PC":
         cmd += ["--method", "all"]
     log = resolve_path(cfg.run_all.logs_dir) / f"{step}_seed{seed}.log"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("w", encoding="utf-8") as fh:
-        return subprocess.run(cmd, cwd=REPO_ROOT, stdout=fh, stderr=subprocess.STDOUT).returncode
+    r = cfg.run_all
+    code = 1
+    for attempt in range(1 + r.stall_retries):
+        code = run_with_watchdog(cmd, log, r.stall_minutes * 60, r.poll_seconds, append=attempt > 0)
+        if code == 0:
+            break
+        resumable_stall = code == STALL_EXIT_CODE and step in r.resumable_steps
+        early_failure = step in ARM_STEPS and not (step_dir(cfg, step, seed) / "history.jsonl").exists()  # nothing written yet
+        if not (resumable_stall or early_failure) or attempt == r.stall_retries:
+            break
+        print(f"  {step} seed {seed}: failed (exit {code}) before leaving partial output; retrying", flush=True)
+    return code
 
 
 def print_estimate(est: dict[str, Any]) -> None:
@@ -237,6 +272,15 @@ def _flat(ev: Any):
         yield ev
 
 
+def prevent_sleep() -> bool:
+    """Ask Windows not to sleep while this process runs (a per-process request; no system setting is changed)."""
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    ES_CONTINUOUS, ES_SYSTEM_REQUIRED = 0x80000000, 0x00000001
+    return bool(ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED))
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI: python scripts/run_all.py [--seeds 0 1 ...] [--steps E0 ...] [--yes] [--plan-only]."""
     import argparse
@@ -247,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--yes", action="store_true", help="skip the confirmation prompt")
     p.add_argument("--plan-only", action="store_true", help="print the estimate and progress table, run nothing")
     a = p.parse_args(argv)
+    if not a.plan_only:
+        print("sleep prevention requested:", prevent_sleep(), flush=True)
     return run_all(cfg, a.seeds, a.steps, a.yes, a.plan_only)
 
 

@@ -17,3 +17,4 @@ __pycache__/
 .pytest_cache/
 !results/checkpoints_registry.json
 !results/model_card.json
+.pytest_tmp/

@@ -77,6 +77,21 @@ def test_e5_controller_uses_full_budget_without_llm_or_early_stop(tmp_path, mode
     assert res.counts["evaluations"] + res.counts["validator_rejections"] + res.counts["no_edits"] == 40
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA GPU")
+def test_random_proposals_work_on_a_cuda_model(model) -> None:
+    """Regression: add_delta used .numpy() on a CUDA tensor, which crashed every GPU random-search iteration."""
+    gpu = model.to("cuda")
+    proposer = RandomProposer(CFG, LAYERS, OPS, arm_rng(0, "E5"))
+    kinds = Counter()
+    for i in range(150):
+        p = proposer.sample(gpu, BUDGET, f"c{i}")
+        assert validate_proposal(p, gpu, ctx()).ok
+        kinds.update(op["operation"] for op in p["operations"])
+    assert kinds["add_delta"] > 0
+    agent = RandomSearchAgent(CFG, LAYERS, OPS, 0, "E5")
+    assert len(agent.propose("", gpu, 1, {"remaining_edit_budget": BUDGET}).proposals) == CFG.budgets.candidates_per_iteration
+
+
 # ---------------- E7 gradient heuristic ----------------
 
 def test_e7_never_touches_an_llm_client(tmp_path, model, monkeypatch) -> None:

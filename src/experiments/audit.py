@@ -27,7 +27,7 @@ def collect_rows(results_dir: Path) -> list[dict[str, Any]]:
     rows = []
     for path in sorted(results_dir.glob("*/seed*/summary.json")):
         s = json.loads(path.read_text(encoding="utf-8"))
-        if str(s["arm"]).startswith("DRY_") or str(s["arm"]).endswith("_DRY"):
+        if str(s["arm"]).startswith(("DRY_", "ABL_")) or str(s["arm"]).endswith("_DRY"):   # ablations use other budgets
             continue
         cost = s.get("cost", {})
         tags = s.get("tags", {})

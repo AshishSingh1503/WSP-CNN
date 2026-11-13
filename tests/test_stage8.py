@@ -313,3 +313,33 @@ def test_final_eval_is_the_only_importer_of_get_test_loader() -> None:
             if isinstance(node, ast.ImportFrom) and any(a.name == "get_test_loader" for a in node.names):
                 importers.append(path.relative_to(REPO_ROOT).as_posix())
     assert importers == ["src/experiments/final_eval.py"]
+
+
+# ---------------- run_all stall watchdog ----------------
+
+def test_watchdog_kills_a_silent_process_and_spares_a_busy_one(tmp_path) -> None:
+    import sys
+    silent = [sys.executable, "-c", "import time; time.sleep(30)"]
+    assert ra.run_with_watchdog(silent, tmp_path / "a.log", stall_seconds=1.5, poll_seconds=0.3) == ra.STALL_EXIT_CODE
+    assert "WATCHDOG" in (tmp_path / "a.log").read_text()
+    busy = [sys.executable, "-u", "-c", "import time\nfor i in range(8):\n    print(i, flush=True); time.sleep(0.4)"]
+    assert ra.run_with_watchdog(busy, tmp_path / "b.log", stall_seconds=1.5, poll_seconds=0.3) == 0   # keeps logging, not killed
+    failing = [sys.executable, "-c", "import sys; sys.exit(3)"]
+    assert ra.run_with_watchdog(failing, tmp_path / "c.log", stall_seconds=5, poll_seconds=0.2) == 3
+
+
+def test_run_step_retries_resumable_stalls_and_early_arm_failures(tmp_path, monkeypatch) -> None:
+    cfg = cfg_in(tmp_path)
+    calls = []
+    monkeypatch.setattr(ra, "run_with_watchdog", lambda *a, **k: calls.append(1) or ra.STALL_EXIT_CODE)
+    assert ra.run_step(cfg, "E1", 1) == ra.STALL_EXIT_CODE and len(calls) == 1 + cfg.run_all.stall_retries
+    calls.clear()
+    monkeypatch.setattr(ra, "run_with_watchdog", lambda *a, **k: calls.append(1) or 1)
+    assert ra.run_step(cfg, "E1", 1) == 1 and len(calls) == 1                     # a real E1 crash is not retried
+    calls.clear()
+    assert ra.run_step(cfg, "E5", 1) == 1 and len(calls) == 1 + cfg.run_all.stall_retries   # arm failed before any output
+    calls.clear()
+    history = ra.step_dir(cfg, "E5", 1) / "history.jsonl"
+    history.parent.mkdir(parents=True)
+    history.write_text("{}")                                                       # partial run exists: never retry
+    assert ra.run_step(cfg, "E5", 1) == 1 and len(calls) == 1

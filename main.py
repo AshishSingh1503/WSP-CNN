@@ -103,6 +103,14 @@ def run_final_eval_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) 
     print(f"final_eval complete: {len(counts)} checkpoints, evaluations per checkpoint min/max = {min(counts.values())}/{max(counts.values())}")
 
 
+def run_ablation_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """One ablation (``--ablation ID``) for ``--seed``; validation only."""
+    from src.experiments.ablations import run_ablation
+    if not args.ablation:
+        raise SystemExit("ERROR: --ablation <id> is required (see ablations.defs in configs/config.yaml)")
+    run_ablation(cfg, args.seed, args.ablation, log, dry_run=args.dry_run)
+
+
 EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]] = {
     "make_splits": run_make_splits,
     "check_data": run_check_data,
@@ -118,6 +126,7 @@ EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]
     "last_layer_rs": _arm_cmd("E6_RS", "random", ("classifier.6",)),
     "grad_heuristic": _arm_cmd("E7", "grad"),
     "audit": run_audit_cmd,
+    "ablation": run_ablation_cmd,
     "final_eval": run_final_eval_cmd,
 }
 
@@ -134,6 +143,7 @@ def main() -> None:
     parser.add_argument("--token", default=None, help="final_eval: SHA-256 of results/FROZEN_PROTOCOL.lock")
     parser.add_argument("--i-understand-this-is-a-deviation", action="store_true", dest="i_understand_this_is_a_deviation",
                         help="final_eval: allow re-running when test results already exist (recorded in PROTOCOL.md)")
+    parser.add_argument("--ablation", default=None, help="ablation: id from ablations.defs in configs/config.yaml")
     parser.add_argument("--fault", default=None, help="positive_control: a single fault name from configs/faults.yaml")
     parser.add_argument("--sweep", action="store_true", help="finetune: run the seed-0 lr sweep")
     parser.add_argument("--reproduce-check", action="store_true",

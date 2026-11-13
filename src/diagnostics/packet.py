@@ -82,11 +82,12 @@ def _pure_fields(model: nn.Module, *, eval_result: EvalResult, val_edit_indices:
     metrics = MetricsSummary(n=eval_result.n, loss=eval_result.loss, accuracy=eval_result.accuracy,
                              top5_accuracy=eval_result.top5_accuracy, macro_f1=eval_result.macro_f1,
                              per_class_accuracy=eval_result.per_class_accuracy)
-    activations = analyze_activations(model, diag_batches, device, d, cfg.data.num_classes)
+    activation_summary = (summarize_activations(analyze_activations(model, diag_batches, device, d, cfg.data.num_classes), d)
+                          if d.include_activation_stats else {})
     return {"model_name": d.model_name, "seed": seed, "iteration": iteration, "metrics": metrics,
-            "confusion": analyze_errors(eval_result, val_edit_indices, d),
-            "weight_summary": inspect_weights(model, d.weight_topk),
-            "activation_summary": summarize_activations(activations, d),
+            "confusion": analyze_errors(eval_result, val_edit_indices, d) if d.include_confusion else {},
+            "weight_summary": inspect_weights(model, d.weight_topk) if d.include_weight_stats else {},
+            "activation_summary": activation_summary,
             "allowed_layers": list(cfg.dsl.allowed_layers), "allowed_ops": list(cfg.dsl.allowed_ops),
             "remaining_edit_budget": remaining_edit_budget,
             "remaining_candidate_budget": remaining_candidate_budget, "edit_history": edit_history}

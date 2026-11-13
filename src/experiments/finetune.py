@@ -44,8 +44,9 @@ def _run_fit(cfg: Config, seed: int, s: FitSettings, out_dir: Path, log: JsonlLo
         enable_deterministic(cfg.training.warn_only_deterministic)
     set_seed(seed)
     reference = clone_model(model).cpu()
-    result = fit(model, lambda epoch: get_loader("train", cfg, seed=seed * 1000 + epoch),
-                 {"val_select": get_loader("val_select", cfg), "val_edit": get_loader("val_edit", cfg)},
+    result = fit(model, lambda epoch: get_loader("train", cfg, seed=seed * 1000 + epoch, persistent=False),
+                 {"val_select": get_loader("val_select", cfg, persistent=False),
+                  "val_edit": get_loader("val_edit", cfg, persistent=False)},
                  s, device, out_dir, log)
     return reference, start_hash, result
 

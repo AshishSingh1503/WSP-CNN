@@ -54,7 +54,7 @@ class RandomProposer:
         t = dict(model.named_parameters())[name].detach()
         n = min(n, t.numel(), self.dsl.add_delta.max_indices)
         flat = self.rng.choice(t.numel(), n, replace=False)
-        cur = t.reshape(-1)[torch.as_tensor(flat)].double().abs().numpy()
+        cur = t.reshape(-1)[torch.as_tensor(flat, device=t.device)].double().abs().cpu().numpy()
         c = self.dsl.add_delta
         bound = np.minimum(c.max_abs_delta, c.rel_value_factor * cur + c.rel_value_offset) * self.rs.safety
         delta = self.rng.choice([-1.0, 1.0], n) * bound * self.rng.uniform(*mag, size=n)

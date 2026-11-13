@@ -78,10 +78,19 @@ def _set_rng_state(state: dict[str, Any]) -> None:
         torch.cuda.set_rng_state_all(state["cuda"])
 
 
-def _atomic_save(obj: Any, path: Path) -> None:
+def _atomic_save(obj: Any, path: Path, attempts: int = 5, wait_seconds: float = 30.0) -> None:
+    """Write to ``path.tmp`` then rename; retry on write errors (a momentarily full disk must not kill a run)."""
     tmp = path.with_suffix(path.suffix + ".tmp")
-    torch.save(obj, tmp)
-    os.replace(tmp, path)
+    for attempt in range(attempts):
+        try:
+            torch.save(obj, tmp)
+            os.replace(tmp, path)
+            return
+        except (RuntimeError, OSError):
+            tmp.unlink(missing_ok=True)
+            if attempt == attempts - 1:
+                raise
+            time.sleep(wait_seconds)
 
 
 def _cpu_state(model: nn.Module) -> dict[str, torch.Tensor]:
