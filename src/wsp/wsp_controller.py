@@ -12,7 +12,8 @@ import torch
 from torch import nn
 
 from src.diagnostics.packet import EditHistoryItem, build_hybrid_packet, build_pure_packet, to_prompt_json
-from src.models.checkpoint import clone_model, save_checkpoint
+from src.models.checkpoint import clone_model
+from src.models.delta import save_delta
 from src.training.evaluate import EvalResult
 from src.utils.config import Config, config_hash
 from src.utils.logger import JsonlLogger
@@ -25,6 +26,7 @@ from src.wsp.llm_agent import AgentResult, BudgetExceeded, LLMAgent
 from src.wsp.weight_editor import protect_model
 
 SUMMARY_CHARS = 200
+DELTA_NAME = "final_delta.npz"
 
 
 @dataclass(frozen=True)
@@ -132,8 +134,8 @@ class WSPController:
     # -- main loop --
     def run(self) -> RunResult:
         s, cfg = self.s, self.cfg
-        if (self.ckpt_dir / "final.pt").exists():
-            raise FileExistsError(f"{self.ckpt_dir / 'final.pt'} exists; refusing to overwrite a finished run")
+        if (self.ckpt_dir / DELTA_NAME).exists():
+            raise FileExistsError(f"{self.ckpt_dir / DELTA_NAME} exists; refusing to overwrite a finished run")
         if self.history_path.exists():
             raise FileExistsError(f"{self.history_path} exists; use a fresh run directory")
         wall0 = time.perf_counter()
@@ -256,11 +258,13 @@ class WSPController:
                   "validator_rejections": cand_budget.validator_rejections, "no_edits": cand_budget.no_edits}
         meta = {"arm": self.s.arm, "seed": self.seed, "config_hash": config_hash(self.cfg),
                 "final_state_index": best_index, "states": [asdict(r) for r in states], "counts": counts}
-        sha = save_checkpoint(final, self.ckpt_dir / "final.pt", meta)
+        saved = save_delta(self.ckpt_dir / DELTA_NAME, self.start, final, meta)
+        sha = saved["final_state_sha256"]
         summary = {"arm": self.s.arm, "seed": self.seed, "tags": self.tags, "start_sha256": self.start_sha256,
                    "settings": asdict(self.s), "stop_reason": stop_reason, "final_index": best_index,
                    "states": [asdict(r) for r in states], "counts": counts, "cost": cost,
-                   "checkpoint_sha256": sha, "diff_global_rel_norm": diff["global_rel_norm"],
+                   "checkpoint_sha256": sha, "delta_path": str(self.ckpt_dir / DELTA_NAME),
+                   "delta_file_sha256": saved["file_sha256"], "diff_global_rel_norm": diff["global_rel_norm"],
                    "diff_n_changed": diff["n_changed"], "diff_per_layer": diff["per_layer"]}
         (self.run_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
         self._write({"type": "end", "stop_reason": stop_reason, "final_index": best_index})

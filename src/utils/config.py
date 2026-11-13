@@ -276,6 +276,7 @@ class Config(_Frozen):
     random_search: RandomSearchConfig
     grad_heuristic: GradHeuristicConfig
     random_edit: RandomEditConfig
+    run_all: RunAllConfig
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
@@ -324,6 +325,16 @@ class RandomEditConfig(_Frozen):
     norm_tolerance: float
     max_attempts: int
     unit_magnitude: tuple[float, float]
+
+
+class RunAllConfig(_Frozen):
+    order: tuple[str, ...]
+    llm_steps: tuple[str, ...]
+    pc_methods: tuple[str, ...]
+    default_minutes: dict[str, float]
+    progress_file: str
+    progress_json: str
+    logs_dir: str
 
 
 class FaultSpecConfig(_Frozen):

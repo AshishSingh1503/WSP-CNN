@@ -45,7 +45,7 @@ def test_scripted_run_accept_reject_budget_history_and_selection(tmp_path, model
     assert float(res.final_model.classifier[6].bias[3]) == pytest.approx(float(model.classifier[6].bias[3]) + expected_bias, abs=1e-6)
     assert res.diff["n_changed"] == (0 if expected_final == 0 else 1)
     assert sha256_tensor_dict(model.state_dict()) == start_hash   # the start model was never modified
-    assert (tmp_path / "ckpt" / "final.pt").is_file() and (tmp_path / "run" / "summary.json").is_file()
+    assert (tmp_path / "ckpt" / "final_delta.npz").is_file() and (tmp_path / "run" / "summary.json").is_file()
     # audit trail
     hist = read_history(tmp_path)
     cands = [r for r in hist if r["type"] == "candidate"]
@@ -98,7 +98,7 @@ def test_cost_cap_stops_the_run_cleanly(tmp_path, model) -> None:
     res = make_controller(tmp_path, model, agent_for(client), stop_after_unproductive=None, max_iterations=10).run()
     assert res.stop_reason.startswith("cost_cap") and len(fake.calls) == 2
     assert res.counts["iterations"] == 3 and res.cost["real_calls"] == 2
-    assert (tmp_path / "ckpt" / "final.pt").is_file()           # a clean stop still saves the final state
+    assert (tmp_path / "ckpt" / "final_delta.npz").is_file()    # a clean stop still saves the final state
 
 
 def test_call_cap_guard() -> None:

@@ -266,3 +266,10 @@ _(Empty at freeze. Append dated entries only, newest last, in this format.)_
 - Why: a full val_edit pass through the image loader takes about 30 s on this laptop; the cached path takes a few seconds.
 - Were any test results seen? No.
 
+### 2026-11-13 — D8: sparse checkpoints and a single-pass final evaluation (Sections 4, 13)
+- What changed: editing arms (E2, E3, E5, E6, E6-RS, E7 and the PC variants) save their final state as the changed scalars relative to their start model (`final_delta.npz` + sidecar with the full-state SHA-256) instead of a full 230 MB checkpoint; E4 stores its proposals so each random model is rebuilt; PC faulted starts are rebuilt deterministically from E0 + `configs/faults.yaml`. Every rebuilt state is verified against its recorded SHA-256 before evaluation. E0 and E1 keep full checkpoints.
+- Final evaluation opens the test set once and passes every frozen checkpoint over it in a single sweep (models are switched between batches by sparse overlays); all numerics are the same fp32 forward as validation. `results/test/eval_ledger.jsonl` records one line per evaluation.
+- Why: 5 seeds of full checkpoints would need roughly 20 GB on a disk that has 2-13 GB free; the edits are at most 57,044 scalars.
+- Were any test results seen? No.
+- Affected claims / tables: none (storage and evaluation mechanics only).
+

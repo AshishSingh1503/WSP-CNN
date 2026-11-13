@@ -204,6 +204,7 @@ def run_random_edit(cfg: Config, seed: int, log: JsonlLogger) -> dict[str, Any]:
         sel = data.eval_select(built["model"])
         samples.append({"sample": k, "val_select": {"accuracy": sel.accuracy, "loss": sel.loss, "macro_f1": sel.macro_f1},
                         "checkpoint_sha256": sha256_tensor_dict(built["model"].state_dict()),
+                        "proposals": built["proposals"],
                         **{key: built[key] for key in ("attempts", "rel_norm", "rel_norm_error", "n_changed",
                                                        "scalars_by_layer_type", "matched")}})
         log.log("e4_sample", **samples[-1])

@@ -93,6 +93,16 @@ def run_audit_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> No
     main_audit(cfg)
 
 
+def run_final_eval_cmd(cfg: Config, log: JsonlLogger, args: argparse.Namespace) -> None:
+    """Final test evaluation of every frozen checkpoint; needs --token (SHA-256 of results/FROZEN_PROTOCOL.lock)."""
+    if not args.token:
+        raise SystemExit("ERROR: --token <sha256 of results/FROZEN_PROTOCOL.lock> is required")
+    from src.experiments.final_eval import ledger_counts, run_final_eval
+    run_final_eval(cfg, args.token, log, allow_rerun=args.i_understand_this_is_a_deviation)
+    counts = ledger_counts(cfg)
+    print(f"final_eval complete: {len(counts)} checkpoints, evaluations per checkpoint min/max = {min(counts.values())}/{max(counts.values())}")
+
+
 EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]] = {
     "make_splits": run_make_splits,
     "check_data": run_check_data,
@@ -108,6 +118,7 @@ EXPERIMENTS: dict[str, Callable[[Config, JsonlLogger, argparse.Namespace], None]
     "last_layer_rs": _arm_cmd("E6_RS", "random", ("classifier.6",)),
     "grad_heuristic": _arm_cmd("E7", "grad"),
     "audit": run_audit_cmd,
+    "final_eval": run_final_eval_cmd,
 }
 
 
@@ -120,6 +131,9 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true", help="WSP arms: use the scripted FakeLLM (no API calls)")
     parser.add_argument("--method", default="pure", choices=["pure", "hybrid", "random", "grad", "all"],
                         help="positive_control: which proposer to run on the faulted model ('all' = pure, random, grad)")
+    parser.add_argument("--token", default=None, help="final_eval: SHA-256 of results/FROZEN_PROTOCOL.lock")
+    parser.add_argument("--i-understand-this-is-a-deviation", action="store_true", dest="i_understand_this_is_a_deviation",
+                        help="final_eval: allow re-running when test results already exist (recorded in PROTOCOL.md)")
     parser.add_argument("--fault", default=None, help="positive_control: a single fault name from configs/faults.yaml")
     parser.add_argument("--sweep", action="store_true", help="finetune: run the seed-0 lr sweep")
     parser.add_argument("--reproduce-check", action="store_true",

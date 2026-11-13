@@ -212,3 +212,22 @@ random_edit:                 # E4: random editing matched to the E2 edit set (no
   norm_tolerance: 0.10
   max_attempts: 300
   unit_magnitude: [0.5, 1.0]         # per-entry magnitude fraction before global rescaling
+
+run_all:                     # scripts/run_all.py
+  order: [E0, E1, PC, E2, E3, E4, E5, E6, E6_RS, E7]
+  llm_steps: [E2, E3, E6, PC]        # steps that call the LLM (PC runs Pure WSP on 3 faults)
+  pc_methods: [pure, random, grad]   # PC variants: Pure WSP, E5 and E7 on every fault
+  default_minutes:                   # used only until a step has a measured duration
+    E0: 4
+    E1: 26
+    PC: 75
+    E2: 15
+    E3: 15
+    E4: 10
+    E5: 8
+    E6: 12
+    E6_RS: 6
+    E7: 10
+  progress_file: results/progress.md
+  progress_json: results/progress.json
+  logs_dir: results/logs/run_all
