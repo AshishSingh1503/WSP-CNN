@@ -287,3 +287,10 @@ _(Empty at freeze. Append dated entries only, newest last, in this format.)_
 - Were any test results seen before this change? No. The failed attempt wrote nothing (results/test did not exist afterwards) and printed no metric. The fix was checked on validation (val_select) batches only, with all 150 variants.
 - Affected claims / tables: none. This is not a re-evaluation: the test set is evaluated once, by the fixed code.
 
+### 2026-11-14 — D11: ablations A1-A9 run after the test evaluation (Section 13, step 2)
+- What changed: Section 13 requires every planned run, including the A6 budget ablation, to be finished before the single test evaluation. The 33 ablation runs (A1-A9, seeds 0-2) were run after the test evaluation of the 150 main checkpoints.
+- Why: the main-arm test evaluation was prioritised; the ablations are validation-only (val_select accuracy) and were approved to run afterwards.
+- Safeguards: ablation runs never touch the test set and are not in the frozen checkpoint list; they use the frozen config, prompts and DSL. Ablation settings were fixed in configs/config.yaml before the test evaluation. The test results were seen before the ablations ran; no ablation setting or analysis was changed in response to them.
+- Execution notes: the queue was killed once by a session restart (A2 seed 0 partial folder moved to results/_quarantine_interrupted_ablation/ and rerun) and stopped three times on a transient Windows memory error (1455) at data-loader start-up; the affected runs were rerun unchanged.
+- Affected claims / tables: the ablation table (results/tables/ablations.csv) and H5 only; both are exploratory and validation-only.
+
