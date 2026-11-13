@@ -91,6 +91,20 @@ def test_switching_model_matches_separate_models_and_restores_base(model) -> Non
     assert sha256_tensor_dict(sm.model.state_dict()) == sha256_tensor_dict(model.state_dict())
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs CUDA")
+def test_switching_model_cuda_with_device_overlays(model) -> None:
+    """Regression: final_eval moves overlays to the GPU while the base copy stays on the CPU."""
+    v1 = edited(model, bias_op(0.5))
+    v2 = edited(model, {"operation": "scale_output_channel", "target_layer": "features.0", "channel_indices": [1], "scale_factors": [0.6]})
+    base = {n: p.detach().cpu().clone() for n, p in model.named_parameters()}
+    sm = SwitchingModel(clone_model(model), base, "cuda")
+    ovs = [{n: (i.to("cuda"), v.to("cuda")) for n, (i, v) in overlay_between(model, m).items()} for m in (v1, v2)]
+    for ov in (ovs[0], ovs[1], None, ovs[0]):
+        sm.set_variant(ov)
+    sm.set_variant(None)
+    assert sha256_tensor_dict({k: v.cpu() for k, v in sm.model.state_dict().items()}) == sha256_tensor_dict(model.state_dict())
+
+
 def test_controller_delta_matches_reported_hash(tmp_path, model) -> None:
     fake = FakeLLM([json.dumps([proposal("g", bias_op(0.5))]), json.dumps([proposal("n", {"operation": "no_edit", "reason": ""})])] * 2)
     agent = LLMAgent(fake, CFG, "pure", LAYERS, OPS)

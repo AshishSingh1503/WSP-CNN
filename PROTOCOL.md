@@ -282,3 +282,8 @@ _(Empty at freeze. Append dated entries only, newest last, in this format.)_
 - Were any test results seen before these changes? No.
 - Affected claims / tables: P-b, P-c and exploratory comparisons involving E4/E5/E6-RS; P-d (the seed-0 E5 PC rows come from the rerun).
 
+### 2026-11-13 — D10: post-freeze code fix in the final-evaluation helper (Sections 11, 14)
+- What changed: `SwitchingModel.set_variant` (src/models/delta.py) indexed a CPU tensor with GPU indices, so the first final_eval attempt (started 21:28, after the freeze) crashed in its first batch with a RuntimeError. The fix indexes the CPU base copy with `idx.cpu()`. A CUDA regression test was added (tests/test_stage8.py). No frozen checkpoint, config, split, metric or analysis rule was changed; the lock file and all 150 checkpoint hashes are unchanged and were re-verified at the start of the run.
+- Were any test results seen before this change? No. The failed attempt wrote nothing (results/test did not exist afterwards) and printed no metric. The fix was checked on validation (val_select) batches only, with all 150 variants.
+- Affected claims / tables: none. This is not a re-evaluation: the test set is evaluated once, by the fixed code.
+

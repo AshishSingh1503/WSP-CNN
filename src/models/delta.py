@@ -118,7 +118,7 @@ class SwitchingModel:
     def set_variant(self, overlay: Overlay | None) -> None:
         for name, (idx, _) in self._active.items():
             flat = self._params[name].detach().view(-1)
-            flat[idx.to(self.device)] = self.base[name][idx].to(self.device)
+            flat[idx.to(self.device)] = self.base[name][idx.cpu()].to(self.device)
         self._active = overlay or {}
         for name, (idx, val) in self._active.items():
             flat = self._params[name].detach().view(-1)
